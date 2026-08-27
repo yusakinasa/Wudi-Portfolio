@@ -1,0 +1,38 @@
+---
+interface Project {
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  github?: string;
+  demo?: string;
+  featured?: boolean;
+  date?: string;
+  image?: string;
+  status?: string;
+}
+
+const { project, index } = Astro.props as { project: Project; index: number };
+---
+
+<article class="project-row" data-category={project.category}>
+  <div class="project-index">{String(index + 1).padStart(2, '0')}</div>
+  <div class="project-main">
+    <div class="project-title-line">
+      <h3>{project.name}</h3>
+      {project.featured && <span class="eyebrow-badge">Featured</span>}
+    </div>
+    <p>{project.description}</p>
+    <ul class="tag-list" aria-label={`${project.name} technologies`}>
+      {project.tags.map((tag) => <li>{tag}</li>)}
+    </ul>
+  </div>
+  <div class="project-meta">
+    {project.status && <span>{project.status}</span>}
+    {project.date && <time datetime={project.date}>{project.date}</time>}
+  </div>
+  <div class="project-links">
+    {project.github && <a href={project.github} target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>}
+    {project.demo && <a href={project.demo} target="_blank" rel="noreferrer">Demo <span aria-hidden="true">↗</span></a>}
+  </div>
+</article>

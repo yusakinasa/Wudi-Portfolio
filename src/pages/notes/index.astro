@@ -1,0 +1,45 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import NoteCard from '../../components/NoteCard.astro';
+import { getCollection } from 'astro:content';
+import site from '../../../data/site.json';
+
+const notes = (await getCollection('notes', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+const categories = [...new Set(notes.map((note) => note.data.category))].sort();
+---
+
+<BaseLayout title="Notes" description="Notes on programming, AI, Linux, frontend work, and learning in public.">
+  <section class="page-heading" aria-labelledby="notes-title">
+    <div class="container page-heading-inner">
+      <h1 id="notes-title">Notes</h1>
+      <p>{site.notesDescription}</p>
+    </div>
+  </section>
+  <section class="notes-page container" aria-label="Browse notes">
+    <div class="filter-bar" role="group" aria-label="Filter by category">
+      <button class="filter-button" type="button" data-filter="all" aria-pressed="true">All</button>
+      {categories.map((category) => <button class="filter-button" type="button" data-filter={category} aria-pressed="false">{category}</button>)}
+    </div>
+    <div class="notes-list">
+      {notes.map((note) => <NoteCard note={note} />)}
+    </div>
+    <p class="empty-state" hidden>No notes in this category yet.</p>
+  </section>
+  <script>
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-filter]'));
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-category]'));
+    const empty = document.querySelector('.empty-state');
+    buttons.forEach((button) => button.addEventListener('click', () => {
+      const selected = button.dataset.filter;
+      buttons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+      let visible = 0;
+      cards.forEach((card) => {
+        const show = selected === 'all' || card.dataset.category === selected;
+        card.toggleAttribute('hidden', !show);
+        if (show) visible += 1;
+      });
+      empty?.toggleAttribute('hidden', visible !== 0);
+    }));
+  </script>
+</BaseLayout>

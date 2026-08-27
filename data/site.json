@@ -1,0 +1,19 @@
+{
+  "name": "Wudi",
+  "title": "Wudi — developer & AI learner",
+  "description": "A quiet corner for code, systems, and the ideas behind them.",
+  "avatar": "/avatar.svg",
+  "github": "https://github.com/yusakinasa",
+  "email": "hello@wudi.dev",
+  "location": "China",
+  "slogan": "Make useful things. Keep learning in public.",
+  "bio": "I build small, thoughtful tools and write down what I learn along the way — from Linux internals to the practical edges of AI.",
+  "focus": "Currently exploring the space where useful software, thoughtful interfaces, and AI meet.",
+  "projectsIntro": "A few experiments and tools I’ve made while learning in public. Most are small by design: narrow in scope, easy to inspect, useful enough to keep.",
+  "projectsDescription": "A small archive of things I’ve built, maintained, or taken apart to understand better.",
+  "notesDescription": "Working notes from the edges of programming, AI, Linux, frontend craft, and the tools that help me think.",
+  "socialLinks": [
+    { "label": "GitHub", "href": "https://github.com/yusakinasa" },
+    { "label": "Email", "href": "7q5u6w5y@gmail.com" }
+  ]
+}

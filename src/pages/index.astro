@@ -1,0 +1,71 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import site from '../../data/site.json';
+import projects from '../../data/projects.json';
+import { getCollection } from 'astro:content';
+
+const allNotes = (await getCollection('notes', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+const latestNotes = allNotes.slice(0, 3);
+const featuredProjects = projects.filter((project) => project.featured).slice(0, 3);
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const formatDate = (date: Date) => date.toLocaleDateString('en', { year: 'numeric', month: 'short' });
+---
+
+<BaseLayout title="Home">
+  <section class="hero" aria-labelledby="intro-title">
+    <div class="container hero-grid">
+      <div>
+        <p class="eyebrow">{site.location} · independent corner of the internet</p>
+        <h1 id="intro-title">Hello, I’m <em>{site.name}</em>.</h1>
+        <p class="hero-lede">{site.bio}</p>
+        <div class="hero-links">
+          <a class="text-link" href={site.github} target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href={`${base}/notes`}>Read the notes <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href={`mailto:${site.email}`}>Say hello <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+      <aside class="hero-aside" aria-label="About">
+        <img class="avatar" src={`${base}${site.avatar}`} alt={`${site.name} avatar`} width="64" height="64" />
+        <strong>{site.slogan}</strong>
+        <p>{site.focus}</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="home-section" aria-labelledby="notes-heading">
+    <div class="container">
+      <div class="section-intro">
+        <h2 id="notes-heading">Recent notes</h2>
+        <a href={`${base}/notes`}>View all notes ↗</a>
+      </div>
+      <div class="home-notes">
+        {latestNotes.map((note) => (
+          <article class="home-note">
+            <time datetime={note.data.date.toISOString()}>{formatDate(note.data.date)}</time>
+            <p class="note-category">{note.data.category}</p>
+            <h3><a href={`${base}/notes/${note.id}`}>{note.data.title}</a></h3>
+            <p>{note.data.description}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="home-section" aria-labelledby="projects-heading">
+    <div class="container project-preview">
+      <div class="project-preview-copy">
+        <div class="section-intro"><h2 id="projects-heading">Selected work</h2></div>
+        <p>{site.projectsIntro}</p>
+        <div class="hero-links"><a class="text-link" href={`${base}/projects`}>Browse all projects <span aria-hidden="true">↗</span></a></div>
+      </div>
+      <div class="project-preview-list">
+        {featuredProjects.map((project) => (
+          <a class="preview-row" href={project.github} target="_blank" rel="noreferrer">
+            <span>{project.name}</span><small>{project.category}</small>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</BaseLayout>

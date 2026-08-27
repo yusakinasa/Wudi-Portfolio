@@ -1,0 +1,52 @@
+[
+  {
+    "name": "Terminal Notes",
+    "description": "A local-first command line notebook for collecting snippets, decisions, and the commands worth remembering.",
+    "category": "Tools",
+    "tags": ["TypeScript", "CLI", "SQLite"],
+    "github": "https://github.com/wudi/terminal-notes",
+    "featured": true,
+    "date": "2025-11",
+    "status": "In progress"
+  },
+  {
+    "name": "Tiny RAG Lab",
+    "description": "Small, inspectable experiments for understanding retrieval-augmented generation without hiding the interesting parts.",
+    "category": "AI",
+    "tags": ["Python", "Embeddings", "LLM"],
+    "github": "https://github.com/wudi/tiny-rag-lab",
+    "demo": "https://wudi.github.io/tiny-rag-lab",
+    "featured": true,
+    "date": "2025-08",
+    "status": "Stable"
+  },
+  {
+    "name": "Dotfiles",
+    "description": "A calm, portable development environment for macOS and Linux, documented as a series of deliberate defaults.",
+    "category": "Systems",
+    "tags": ["Shell", "Linux", "Nix"],
+    "github": "https://github.com/wudi/dotfiles",
+    "date": "2024-12",
+    "status": "Maintained"
+  },
+  {
+    "name": "Reading Garden",
+    "description": "An experimental static site for turning highlights and unfinished thoughts into connected notes.",
+    "category": "Web",
+    "tags": ["Astro", "Markdown", "CSS"],
+    "github": "https://github.com/wudi/reading-garden",
+    "demo": "https://wudi.github.io/reading-garden",
+    "date": "2024-05",
+    "status": "Archived"
+  },
+  {
+    "name": "New Green of the Porcelain Capital",
+    "description": "This is a static, pure HTML website independently developed by Qu Weiyi in the spring of 2026. Titled \"New Green of the Porcelain Capital\" (Cidu Xinlv), the site serves to document and promote Jingdezhen's culture surrounding broken porcelain. The coding for this project was primarily completed with the assistance of Gemini.",
+    "category": "Web",
+    "tags": ["HTML", "CSS", "JavaScript"],
+    "github": "https://github.com/yusakinasa/New-Green-of-the-Porcelain-Capital",
+    "featured": true,
+    "date": "2026-03",
+    "status": "Archived"
+  }
+]
