@@ -1,0 +1,25 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ExperienceRow from '../../components/ExperienceRow.astro';
+import site from '../../../data/site.json';
+
+const entries = (await getCollection('experiences', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+---
+
+<BaseLayout title="Experience" description={site.experienceDescription} lang="zh-CN">
+  <section class="page-heading" aria-labelledby="experience-title">
+    <div class="container page-heading-inner">
+      <h1 id="experience-title">Experience</h1>
+      <p>{site.experienceIntro}</p>
+    </div>
+  </section>
+
+  <section class="container experience-page" aria-label="经验帖列表">
+    <div class="experience-list">
+      {entries.map((entry) => <ExperienceRow entry={entry} />)}
+    </div>
+    {entries.length === 0 && <p class="empty-state">暂时还没有发布经验帖。</p>}
+  </section>
+</BaseLayout>

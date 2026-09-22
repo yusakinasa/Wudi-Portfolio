@@ -7,23 +7,27 @@ interface Note {
     date: Date;
     category: string;
     tags: string[];
+    lang?: string;
   };
 }
 
 const { note } = Astro.props as { note: Note };
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const notePath = `/notes/${note.id}`;
+const isChinese = note.data.lang === 'zh-CN';
+const locale = isChinese ? 'zh-CN' : 'en';
+const readLabel = isChinese ? '阅读' : 'Read';
 ---
 
 <article class="note-card" data-category={note.data.category}>
-  <div class="note-card-date"><time datetime={note.data.date.toISOString()}>{note.data.date.toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}</time></div>
+  <div class="note-card-date"><time datetime={note.data.date.toISOString()}>{note.data.date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}</time></div>
   <div>
     <p class="note-category">{note.data.category}</p>
     <h3><a href={`${base}${notePath}`}>{note.data.title}</a></h3>
     <p class="note-description">{note.data.description}</p>
-    <ul class="tag-list" aria-label={`${note.data.title} tags`}>
+    <ul class="tag-list" aria-label={`${note.data.title} ${isChinese ? '标签' : 'tags'}`}>
       {note.data.tags.map((tag) => <li>{tag}</li>)}
     </ul>
   </div>
-  <a class="arrow-link" href={`${base}${notePath}`} aria-label={`Read ${note.data.title}`}>Read <span aria-hidden="true">↗</span></a>
+  <a class="arrow-link" href={`${base}${notePath}`} aria-label={`${readLabel}：${note.data.title}`}>{readLabel} <span aria-hidden="true">↗</span></a>
 </article>

@@ -15,10 +15,15 @@ const noteIndex = allNotes.findIndex((item) => item.id === note.id);
 const previous = allNotes[noteIndex + 1];
 const next = allNotes[noteIndex - 1];
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-const formattedDate = note.data.date.toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' });
+const isChinese = note.data.lang === 'zh-CN';
+const locale = isChinese ? 'zh-CN' : 'en';
+const formattedDate = note.data.date.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
+const labels = isChinese
+  ? { all: '全部笔记', previous: '上一篇', next: '下一篇' }
+  : { all: 'All notes', previous: 'Previous', next: 'Next' };
 ---
 
-<BaseLayout title={note.data.title} description={note.data.description}>
+<BaseLayout title={note.data.title} description={note.data.description} lang={note.data.lang}>
   <article class="article-wrap">
     <header class="article-header">
       <p class="eyebrow">{note.data.category}</p>
@@ -30,11 +35,11 @@ const formattedDate = note.data.date.toLocaleDateString('en', { year: 'numeric',
     </header>
     <div class="prose"><Content /></div>
     <footer class="article-footer">
-      <a href={`${base}/notes`}>← All notes</a>
+      <a href={`${base}/notes`}>← {labels.all}</a>
       <div>
-        {previous && <a href={`${base}/notes/${previous.id}`}>Previous</a>}
+        {previous && <a href={`${base}/notes/${previous.id}`}>{labels.previous}</a>}
         {previous && next && <span> · </span>}
-        {next && <a href={`${base}/notes/${next.id}`}>Next →</a>}
+        {next && <a href={`${base}/notes/${next.id}`}>{labels.next} →</a>}
       </div>
     </footer>
   </article>

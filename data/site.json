@@ -12,6 +12,8 @@
   "projectsIntro": "A few experiments and tools I’ve made while learning in public. Most are small by design: narrow in scope, easy to inspect, useful enough to keep.",
   "projectsDescription": "A small archive of things I’ve built, maintained, or taken apart to understand better.",
   "notesDescription": "Working notes from the edges of programming, AI, Linux, frontend craft, and the tools that help me think.",
+  "experienceDescription": "Wudi 发布的实用经验、问题排查过程与解决方案。",
+  "experienceIntro": "记录真实遇到的问题、排查思路，以及最终验证有效的解决办法。",
   "socialLinks": [
     { "label": "GitHub", "href": "https://github.com/yusakinasa" },
     { "label": "Email", "href": "7q5u6w5y@gmail.com" }

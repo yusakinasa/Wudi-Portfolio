@@ -21,6 +21,7 @@ npm run preview
 
 - **Projects:** edit [`data/projects.json`](./data/projects.json). Add an object with `name`, `description`, `category`, `tags`, and links; `featured`, `date`, `status`, and `demo` are optional.
 - **Notes:** add a Markdown file under [`src/content/notes`](./src/content/notes). Include `title`, `description`, `date`, `category`, and `tags` in frontmatter. Nested folders become nested URLs.
+- **Experience posts:** add a Markdown file under [`src/content/experiences`](./src/content/experiences) with the same core frontmatter. Keep article images beside the content and reference them with relative Markdown paths.
 - **Site details:** edit [`data/site.json`](./data/site.json).
 - **Navigation:** edit [`data/navigation.json`](./data/navigation.json). Set `enabled` to `true` for a new section, then add its Astro page under `src/pages/`.
 
