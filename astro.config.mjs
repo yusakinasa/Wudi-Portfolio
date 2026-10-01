@@ -1,4 +1,5 @@
 import { defineConfig } from 'astro/config';
+import paperTagEditor from './tools/papers/dev-tags.mjs';
 
 const repository = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'Portfolio';
 const owner = process.env.GITHUB_REPOSITORY_OWNER ?? 'wudi';
@@ -10,6 +11,7 @@ export default defineConfig({
   // GitHub project pages need the repository name as a base path. User pages do not.
   base: isGithubPages && !isUserSite ? `/${repository}` : '',
   output: 'static',
+  integrations: [paperTagEditor()],
   build: {
     format: 'directory'
   }

@@ -1,0 +1,758 @@
+{
+  "schema_version": "1.0",
+  "id": "lcdrive-2026",
+  "metadata": {
+    "title": "Latent Chain-of-Thought World Modeling for End-to-End Autonomous Driving",
+    "short_title": "LCDrive",
+    "authors": [
+      "Shuhan Tan",
+      "Kashyap Chitta",
+      "Yuxiao Chen",
+      "Ran Tian",
+      "Yurong You",
+      "Yan Wang",
+      "Wenjie Luo",
+      "Yulong Cao",
+      "Philipp Krähenbühl",
+      "Marco Pavone",
+      "Boris Ivanovic"
+    ],
+    "year": 2026,
+    "venue": "arXiv",
+    "doi": "",
+    "arxiv_id": "2512.10226v3",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "",
+    "code_url": "",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "论文提出 LCDrive，以交替生成的动作提议 token 和潜在世界模型 token 替代自动驾驶 VLA 中的自然语言思维链。动作提议与最终轨迹共享词表，世界模型 token 表达对应动作下的未来场景。训练先进行无推理 VLA 预训练，再利用动作提议和真实未来场景构造潜在思维链监督，最后采用 GRPO 后训练。在 PhysicalAI-AV 上，方法改善了总体轨迹误差，并研究了推理预算与轨迹质量的关系。",
+    "one_sentence": "LCDrive 通过交替生成动作提议与潜在世界状态，在与最终驾驶动作对齐的表示中进行多分支推理。",
+    "research_problem": "如何为端到端自动驾驶 VLA 构建紧凑、能够表达时空关系且与最终动作对齐的推理过程。",
+    "motivation": "作者认为自然语言难以准确表达驾驶中的时空几何与多智能体交互，长文本的自回归生成增加延迟，文本解释还可能与实际输出动作不一致。",
+    "core_idea": "以历史世界状态为起点，交替生成共享最终动作词表的动作提议和描述其未来结果的世界模型 token，再根据全部推理分支预测最终轨迹。",
+    "method_summary": "模型使用图像与自车历史输入，生成动作和世界状态交替排列的潜在推理序列；训练结合轨迹监督预训练、潜在思维链冷启动以及以负 ADE 为奖励的 GRPO。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E13",
+      "E14",
+      "E23"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "动作对齐的潜在驾驶思维链",
+      "description": "提出 LCDrive，将动作提议与潜在世界模型 token 交替排列，使推理动作和最终轨迹共享动作词表。",
+      "evidence_ids": [
+        "E01",
+        "E04",
+        "E05"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "潜在思维链冷启动与强化学习训练框架",
+      "description": "结合无推理 VLA 预训练、基于动作提议与真实未来场景的冷启动监督、世界状态预测训练和 GRPO 后训练。",
+      "evidence_ids": [
+        "E03",
+        "E11",
+        "E12",
+        "E13",
+        "E14"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "大规模驾驶数据上的效果与推理预算分析",
+      "description": "在 PhysicalAI-AV 场景均衡子集上比较无推理、文本推理和潜在推理模型，报告总体轨迹误差改善，并分析推理深度、分支数与 token 成本的关系。",
+      "evidence_ids": [
+        "E16",
+        "E17",
+        "E23",
+        "E25",
+        "E28",
+        "E29"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "两路前视摄像头图像：120° 广角与 30° 长焦，分辨率为 320×512。",
+      "自车运动历史；实验使用 1.6 秒历史和 10 Hz 采样。",
+      "冷启动监督额外使用真实未来自车轨迹及周围智能体跟踪框；实际 LCDrive 推理使用模型预测的 LWM token。"
+    ],
+    "outputs": [
+      "交替包含动作提议和潜在世界状态的多分支推理序列。",
+      "64 个离散轨迹 token，解码为未来 6.4 秒、10 Hz 的自车位置与航向轨迹。"
+    ],
+    "components": [
+      {
+        "name": "视觉与语言动作主干",
+        "description": "采用 DINOv2 ViT 图像编码器和 Qwen3-0.5B 语言动作模块；图像、自车和推理 token 拼接后输入解码器。",
+        "evidence_ids": [
+          "E18",
+          "E19"
+        ]
+      },
+      {
+        "name": "轨迹 tokenizer 与 decoder",
+        "description": "通过训练集位姿增量的 k-means 构造 1024 个运动原语编码，每个时间步对应一个 token；查表恢复位姿增量并积分得到连续轨迹。",
+        "evidence_ids": [
+          "E06",
+          "E07"
+        ]
+      },
+      {
+        "name": "潜在世界状态编码器",
+        "description": "将自车坐标系中周围非自车智能体的 1 秒、10 帧状态编码并压缩为紧凑表示。使用内部预训练轨迹预测模型的智能体编码分支，并通过注意力压缩器聚合；每个推理窗口使用两个 LWM token。",
+        "evidence_ids": [
+          "E08",
+          "E09",
+          "E10",
+          "E29"
+        ]
+      },
+      {
+        "name": "动作提议与世界状态预测",
+        "description": "每个提议块包含 1 秒内的 10 个动作 token，与最终轨迹共享词表。轻量 MLP 从接收提议后的 VLA 隐藏表示预测下一窗口的 LWM token。",
+        "evidence_ids": [
+          "E04",
+          "E05",
+          "E29",
+          "E30"
+        ]
+      },
+      {
+        "name": "多分支推理",
+        "description": "各分支共享历史状态锚点并顺序生成，后续分支可条件于先前分支。默认推理深度 K=5、分支数 B=2，训练和评估采用固定预算。",
+        "evidence_ids": [
+          "E15",
+          "E20"
+        ]
+      },
+      {
+        "name": "监督冷启动与 GRPO",
+        "description": "冷启动用教师强制学习动作提议和最终动作，并以平方误差监督 LWM。GRPO 使用最终轨迹的负 ADE 奖励，对生成的提议和最终动作 token 进行优化，最终目标省略 KL 正则。",
+        "evidence_ids": [
+          "E11",
+          "E12",
+          "E13",
+          "E14",
+          "E31",
+          "E32"
+        ]
+      }
+    ],
+    "pipeline": [
+      "Stage 0：使用驾驶数据监督训练无推理 VLA，并保留冻结教师生成动作提议。",
+      "Stage 1 数据构造：采样多个提议轨迹，切分为 1 秒动作块；根据提议积分自车位姿，将真实未来智能体框变换至对应自车坐标系，编码为世界状态监督。",
+      "Stage 1 冷启动：交替排列动作提议和世界状态 token，以教师强制学习推理结构，同时监督最终轨迹和 LWM 预测。",
+      "Stage 2：固定推理预算，采样多组完整输出，以负 ADE 为奖励进行 GRPO 后训练。",
+      "推理：从图像与自车输入预测历史 LWM，依次生成各分支的动作与世界状态，再根据完整上下文生成并解码最终轨迹。"
+    ],
+    "details": "主文将提议教师描述为冻结的无推理 VLA；附录 A.2 进一步指定为使用真实历史 LWM 的 LWM0-only 教师。世界状态监督通过改变自车坐标系来关联不同动作提议。最终轨迹由全部提议及其世界状态共同提供上下文，提议本身不直接承诺最终计划。",
+    "evidence_ids": [
+      "E04",
+      "E05",
+      "E06",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E18",
+      "E19",
+      "E20",
+      "E30",
+      "E31",
+      "E32",
+      "E33",
+      "E34"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "PhysicalAI-AV：与官方公开划分一致的场景均衡子集，训练集 39,072 个片段、87 小时，验证集 23,758 个片段、53 小时。"
+    ],
+    "benchmarks": [
+      "PhysicalAI-AV 总体轨迹与安全指标评估。",
+      "General Driving 和 14 个特定驾驶场景的 ADE 分项评估。",
+      "真实 LWM、无 RL 条件下的推理深度与分支数消融。",
+      "真实 LWM 条件下的推理提议与最终动作关系分析。"
+    ],
+    "metrics": [
+      "ADE：6.4 秒内预测自车位置与专家位置的平均欧氏距离，单位米。",
+      "OffRoad@2.5 / OffRoad@5.0：对应时间窗内自车足迹离开可驾驶区域的片段比例，单位%。",
+      "Coll@2.5 / Coll@5.0：对应时间窗内自车多边形与其他智能体多边形相交的片段比例，单位%。",
+      "Corner Dist.：预测与专家自车框对应角点的平均距离，单位米。",
+      "推理 token 数。",
+      "Reasoning Diversity、Reasoning–Action Alignment、Reasoning Quality、Final-Action Quality，均以 ADE 衡量。"
+    ],
+    "baselines": [
+      "No CoT：不生成推理 token 的 VLA。",
+      "LWM0-only：仅条件于历史世界状态，不进行交替展开。",
+      "Text CoT：使用 AR1 团队提供权重的英语文本推理模型。",
+      "Latent CoT：使用预测 LWM，分别评估有无 RL。",
+      "使用真实 LWM 的 LWM0-only 与 Latent CoT oracle 变体，分别评估有无 RL。"
+    ],
+    "main_results": [
+      {
+        "text": "实际预测 LWM 设置下，LCDrive 加 RL 的 ADE 为 1.626 米，无推理基线为 1.762 米；OffRoad@2.5 为 1.219% 对 1.753%，Coll@5.0 为 0.836% 对 2.207%。",
+        "evidence_ids": [
+          "E23",
+          "E24"
+        ]
+      },
+      {
+        "text": "预测 LWM 的 Latent CoT 经 RL 后，ADE 从 1.668 降至 1.626 米，Coll@5.0 从 1.591% 降至 0.836%；Corner Dist. 从 0.904 降至 0.880 米。",
+        "evidence_ids": [
+          "E23",
+          "E25"
+        ]
+      },
+      {
+        "text": "与 Text CoT 相比，LCDrive 加 RL 的 ADE 较低（1.626 对 1.650 米），但各安全与姿态指标并非全面占优：OffRoad@5.0 为 3.292% 对 3.005%，Coll@2.5 为 0.289% 对 0.276%，Corner Dist. 为 0.880 对 0.642 米。无 RL 的 Latent CoT ADE 为 1.668 米。",
+        "evidence_ids": [
+          "E23",
+          "E25",
+          "E26"
+        ]
+      },
+      {
+        "text": "真实 LWM 条件下，Latent CoT 的 ADE 为 1.268 米，RL 后为 1.197 米；Coll@5.0 从 0.905% 降至 0.867%，但 OffRoad@5.0 从 3.408% 增至 3.443%，Corner Dist. 从 0.691 增至 0.739 米。",
+        "evidence_ids": [
+          "E27",
+          "E35"
+        ]
+      },
+      {
+        "text": "推理预算消融使用真实 LWM 且不进行 RL。作者报告 K=1、B=2 的 24 个推理 token 已改善无推理基线，并观察到增加深度和分支可进一步改善轨迹误差。成本公式约为 12×K×B；默认 K=5、B=2 对应约 120 个 token，而 Text CoT 平均为 71.8 个 token。这些数据表明低预算配置更紧凑，默认配置的 token 数并不低于文本平均值。",
+        "evidence_ids": [
+          "E20",
+          "E28",
+          "E29",
+          "E36",
+          "E37"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E16",
+      "E17",
+      "E20",
+      "E21",
+      "E22",
+      "E23",
+      "E24",
+      "E25",
+      "E26",
+      "E27",
+      "E28",
+      "E29",
+      "E35",
+      "E36",
+      "E37",
+      "E38",
+      "E39",
+      "E40",
+      "E41",
+      "E42"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "潜在思维链训练需要真实智能体框等监督来约束表示，此类监督可能难以大规模获取。",
+      "evidence_ids": [
+        "E43"
+      ]
+    },
+    {
+      "text": "当前模型难以从潜在思维链 token 恢复便于人类理解的表示，例如车内可视化。",
+      "evidence_ids": [
+        "E44"
+      ]
+    },
+    {
+      "text": "当前模型不支持根据任务难度动态调整推理长度。",
+      "evidence_ids": [
+        "E45"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：核心价值在于用共享动作词表和世界状态展开构建结构化推理接口。总体 ADE 改善得到表格支持，但不能据此认定所有安全指标或场景均优于 Text CoT。作者称训练为闭环 RL，不过所给流程主要描述对日志输入采样并使用专家轨迹误差奖励；是否包含真实环境交互仍需核实。世界状态监督使用真实未来智能体运动并改变自车坐标系，其是否能表达其他智能体对新动作的因果反应也尚不确定。",
+    "open_questions": [
+      "在真实交互式闭环驾驶中，基于专家轨迹 ADE 的优化能否保持安全性与恢复能力？",
+      "如何验证潜在世界模型对不同自车动作所引起的其他智能体反应具有因果预测能力？",
+      "正文声称 LCDrive 在所有场景的 ADE 均优于 Text CoT，但表 2 存在反例；这些文字与表格差异如何解释？",
+      "不同训练数据规模下的 Text CoT 比较，以及使用真实 LWM 的效率消融，能否代表同等条件下预测 LWM 模型的优势？",
+      "在默认推理预算下，实际端到端延迟、吞吐量和硬件成本如何？所给材料未提供直接计时结果。",
+      "能否根据场景难度调整推理预算，并在压缩动作表示的同时维持可解释性？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "Abstract",
+      "page": 1,
+      "content": "Our approach unifies CoT reasoning and decision making by representing both in an action-aligned latent space."
+    },
+    {
+      "id": "E02",
+      "section": "1. Introduction",
+      "page": 1,
+      "content": "natural language is ill-suited for representing spatiotemporal geometry and multi-agent interactions"
+    },
+    {
+      "id": "E03",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "We introduce a training framework combining latent CoT cold-start, world model training, and closed-loop RL"
+    },
+    {
+      "id": "E04",
+      "section": "3.2. Latent Chain-of-Thought Reasoning",
+      "page": 4,
+      "content": "We represent each reasoning branch as an interleaved action and latent world model trace"
+    },
+    {
+      "id": "E05",
+      "section": "Abstract",
+      "page": 1,
+      "content": "action-proposal tokens, which use the same vocabulary as the model’s output actions"
+    },
+    {
+      "id": "E06",
+      "section": "3.1. Preliminaries",
+      "page": 3,
+      "content": "the full 6.4 s future at 10 Hz, yielding a sequence of 64 future waypoints"
+    },
+    {
+      "id": "E07",
+      "section": "3.1. Preliminaries",
+      "page": 3,
+      "content": "We build a 1024-code vocabulary via k-means on training ∆-poses."
+    },
+    {
+      "id": "E08",
+      "section": "A.1. Latent World Model Encoder",
+      "page": 12,
+      "content": "each LWM state summarizes a fixed 1.0 s window at 10 Hz in an ego-centric frame."
+    },
+    {
+      "id": "E09",
+      "section": "A.1. Latent World Model Encoder",
+      "page": 12,
+      "content": "We initialize the per-agent temporal encoder from an internal, pretrained trajectory prediction model."
+    },
+    {
+      "id": "E10",
+      "section": "A.1. Latent World Model Encoder",
+      "page": 12,
+      "content": "we use a four-layer attention compressor with shared"
+    },
+    {
+      "id": "E11",
+      "section": "A.2. Stage 1: CoT Cold Start",
+      "page": 12,
+      "content": "This model is trained without latent reasoning and serves as a strong teacher that produces full 6.4 s trajectories."
+    },
+    {
+      "id": "E12",
+      "section": "3.3.2. Stage 1 - CoT Cold Start",
+      "page": 5,
+      "content": "re-center the GT future tracked agent bounding boxes into this ego frame, and encode them to produce a target latent world state"
+    },
+    {
+      "id": "E13",
+      "section": "3.3.3. Stage 2 - Reinforcement Learning",
+      "page": 5,
+      "content": "We use Group Relative Policy Optimization (GRPO) [31] for RL training."
+    },
+    {
+      "id": "E14",
+      "section": "3.3.3. Stage 2 - Reinforcement Learning",
+      "page": 5,
+      "content": "We use a single trajectory-accuracy signal: Average Displacement Error (ADE) in meters"
+    },
+    {
+      "id": "E15",
+      "section": "3.2. Latent Chain-of-Thought Reasoning",
+      "page": 4,
+      "content": "All branches share the history anchor"
+    },
+    {
+      "id": "E16",
+      "section": "4.1. Setup",
+      "page": 5,
+      "content": "39,072 training clips (87 hours) and 23,758 validation clips (53 hours)."
+    },
+    {
+      "id": "E17",
+      "section": "4.1. Setup",
+      "page": 5,
+      "content": "30% of clips are General Driving and the remaining 70% are evenly distributed across 14 specific scenarios"
+    },
+    {
+      "id": "E18",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "We adopt a Qwen3-0.5B [39] LLM as the language–action module and a DINOv2 [25] ViT as the image encoder"
+    },
+    {
+      "id": "E19",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "two front-view cameras (wide 120◦and telephoto 30◦) with 320×512 resolution visual inputs."
+    },
+    {
+      "id": "E20",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "We set the reasoning depth $K   =   5$ and branch factor $B   =   2$ through our experiments unless otherwise specified."
+    },
+    {
+      "id": "E21",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "For each input clip, we randomly sample 6 trajectories from the evaluated model."
+    },
+    {
+      "id": "E22",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "we use model weights provided by the AR1 team [24]."
+    },
+    {
+      "id": "E23",
+      "section": "4.2. Main Results",
+      "page": 7,
+      "content": "| Latent CoT (LCDrive) |  | ✓ | 1.626 | 1.219 | 3.292 | 0.289 | 0.836 | 0.880 |"
+    },
+    {
+      "id": "E24",
+      "section": "4.2. Main Results",
+      "page": 7,
+      "content": "| ∅ (None) |  |  | 1.762 | 1.753 | 5.279 | 0.348 | 2.207 | 0.986 |"
+    },
+    {
+      "id": "E25",
+      "section": "4.2. Main Results",
+      "page": 7,
+      "content": "| Latent CoT |  |  | 1.668 | 1.268 | 3.536 | 0.322 | 1.591 | 0.904 |"
+    },
+    {
+      "id": "E26",
+      "section": "4.2. Main Results",
+      "page": 7,
+      "content": "| Text CoT |  |  | 1.650 | 1.391 | 3.005 | 0.276 | 0.905 | 0.642 |"
+    },
+    {
+      "id": "E27",
+      "section": "4.2. Main Results",
+      "page": 7,
+      "content": "| ∗ | ✓ |  | 1.268 | 1.309 | 3.408 | 0.327 | 0.905 | 0.691 |"
+    },
+    {
+      "id": "E28",
+      "section": "C.1. Ablation Study on Reasoning Depth",
+      "page": 14,
+      "content": "K=1, B=2 with 24 tokens"
+    },
+    {
+      "id": "E29",
+      "section": "C.2. Inference Cost Analysis",
+      "page": 14,
+      "content": "10 discrete action tokens (representing the ego trajectory at 10 Hz), and (ii) 2 latent world model (LWM) tokens."
+    },
+    {
+      "id": "E30",
+      "section": "3.2. Latent Chain-of-Thought Reasoning",
+      "page": 4,
+      "content": "is a lightweight MLP that outputs LWM tokens."
+    },
+    {
+      "id": "E31",
+      "section": "3.3.2. Stage 1 - CoT Cold Start",
+      "page": 5,
+      "content": "We train LCDrive to minimize a standard cross-entropy loss over proposals and the final action plan"
+    },
+    {
+      "id": "E32",
+      "section": "3.3.3. Stage 2 - Reinforcement Learning",
+      "page": 5,
+      "content": "GRPO performs best without KL regularization, so we omit the KL term in the final objective."
+    },
+    {
+      "id": "E33",
+      "section": "3.2. Latent Chain-of-Thought Reasoning",
+      "page": 4,
+      "content": "These proposals are only used as reasoning context and do not commit to a specific final plan."
+    },
+    {
+      "id": "E34",
+      "section": "3.2. Latent Chain-of-Thought Reasoning",
+      "page": 4,
+      "content": "The final actions attend to all proposals and their associated latent world model rollouts"
+    },
+    {
+      "id": "E35",
+      "section": "4.2. Main Results",
+      "page": 7,
+      "content": "| Latent CoT | ✓ | ✓ | 1.197 | 1.303 | 3.443 | 0.318 | 0.867 | 0.739 |"
+    },
+    {
+      "id": "E36",
+      "section": "C.2. Inference Cost Analysis",
+      "page": 15,
+      "content": "an average length of 71.8 tokens, a 75- th percentile of 80 tokens, and a long tail up to 252 tokens per clip."
+    },
+    {
+      "id": "E37",
+      "section": "C.1. Ablation Study on Reasoning Depth",
+      "page": 14,
+      "content": "we do not apply RL fine-tuning and we do not use predicted LWM tokens in this study"
+    },
+    {
+      "id": "E38",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "Corner Dist (m) measures the mean Euclidean distance between corresponding corners of the predicted and expert ego boxes"
+    },
+    {
+      "id": "E39",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "any point in the predicted ego footprint leaves the drivable area"
+    },
+    {
+      "id": "E40",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "any intersection between the ego polygon and any other agent polygon"
+    },
+    {
+      "id": "E41",
+      "section": "B. Reasoning Action Analysis",
+      "page": 13,
+      "content": "All metrics are reported as Average Displacement Error (ADE) in meters."
+    },
+    {
+      "id": "E42",
+      "section": "4.1. Setup",
+      "page": 6,
+      "content": "a large proprietary dataset of driving logs that is an over 100× larger superset of our training set"
+    },
+    {
+      "id": "E43",
+      "section": "5. Conclusion",
+      "page": 9,
+      "content": "requires a source of supervision (e.g., GT agent bounding boxes) to ground the representation, which may be difficult to obtain at scale"
+    },
+    {
+      "id": "E44",
+      "section": "5. Conclusion",
+      "page": 9,
+      "content": "our current model does not support easy recovery of a humaninterpretable representation from a latent CoT token"
+    },
+    {
+      "id": "E45",
+      "section": "5. Conclusion",
+      "page": 9,
+      "content": "our model does not yet support flexible reasoning lengths adjusting to different task difficulties"
+    },
+    {
+      "id": "E46",
+      "section": "References",
+      "page": 10,
+      "content": "Alpamayo-R1: Bridging reasoning and action prediction for generalizable autonomous driving in the long tail. arXiv preprint arXiv:2511.00088, 2025."
+    },
+    {
+      "id": "E47",
+      "section": "References",
+      "page": 10,
+      "content": "DINOv2: Learning robust visual features without supervision. Transactions on Machine Learning Research, 2023."
+    },
+    {
+      "id": "E48",
+      "section": "References",
+      "page": 10,
+      "content": "Qwen3 technical report. arXiv preprint arXiv:2505.09388, 2025."
+    },
+    {
+      "id": "E49",
+      "section": "References",
+      "page": 9,
+      "content": "Training large language models to reason in a continuous latent space. arXiv preprint arXiv:2412.06769, 2024."
+    },
+    {
+      "id": "E50",
+      "section": "References",
+      "page": 10,
+      "content": "DeepSeekMath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300, 2024."
+    },
+    {
+      "id": "E51",
+      "section": "References",
+      "page": 10,
+      "content": "NVIDIA. Physical AI autonomous vehicles dataset."
+    },
+    {
+      "id": "E52",
+      "section": "4.1. Setup",
+      "page": 5,
+      "content": "For each clip, we consider 1.6 s of history and 6.4 s of future ego and surrounding-agent trajectories at 10 Hz."
+    },
+    {
+      "id": "E53",
+      "section": "3.1. Preliminaries",
+      "page": 4,
+      "content": "is predicted by the VLA model itself given the sensor inputs as context."
+    },
+    {
+      "id": "E54",
+      "section": "A.2. Stage 1: CoT Cold Start",
+      "page": 12,
+      "content": "Action proposals from a frozen GT-LWM model."
+    },
+    {
+      "id": "E55",
+      "section": "3.3.2. Stage 1 - CoT Cold Start",
+      "page": 5,
+      "content": "Additionally, we train the LWM prediction module to pre-dict the corresponding ground-truth LWM embedding"
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "Alpamayo-R1: Bridging reasoning and action prediction for generalizable autonomous driving in the long tail",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "Text CoT 基线使用 AR1 团队提供的权重，LCDrive 的实现也遵循 AR1 架构设计。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2511.00088",
+      "url": "",
+      "evidence_ids": [
+        "E22",
+        "E46"
+      ]
+    },
+    {
+      "title": "DINOv2: Learning robust visual features without supervision",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "LCDrive 使用 DINOv2 ViT 作为图像编码器。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E18",
+        "E47"
+      ]
+    },
+    {
+      "title": "Qwen3 technical report",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "LCDrive 使用 Qwen3-0.5B 作为语言动作模块。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2505.09388",
+      "url": "",
+      "evidence_ids": [
+        "E18",
+        "E48"
+      ]
+    },
+    {
+      "title": "Training large language models to reason in a continuous latent space",
+      "paper_id": null,
+      "relation_type": "related",
+      "description": "论文在语言无关推理的相关工作中引用该潜在空间推理研究。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2412.06769",
+      "url": "",
+      "evidence_ids": [
+        "E49"
+      ]
+    },
+    {
+      "title": "DeepSeekMath: Pushing the limits of mathematical reasoning in open language models",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "论文将 GRPO 算法引用归于该文献，并用于 LCDrive 后训练。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2402.03300",
+      "url": "",
+      "evidence_ids": [
+        "E13",
+        "E50"
+      ]
+    },
+    {
+      "title": "Physical AI autonomous vehicles dataset",
+      "paper_id": null,
+      "relation_type": "uses_dataset",
+      "description": "LCDrive 的训练与评估使用该数据集的场景均衡子集。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles",
+      "evidence_ids": [
+        "E16",
+        "E51"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F2",
+      "caption": "Figure 2. Architecture. Overview of our proposed latent reasoning framework.",
+      "description": "整体架构图。左侧驾驶图像经过 Image Tokenizer，以 OBS 和 EGO token 输入中央紫色 Reasoning Vision-Language-Action Model。图中潜在推理序列交替显示 LWM 世界状态和动作提议，并由 BEGIN REASON、END REASON 标记界定；上方配有世界状态示意及动作箭头。推理结束后生成最终 A1、A2、A3 等动作 token，由右侧 Trajectory Decoder 转为轨迹。该图直接展示论文核心的世界状态与动作交替推理接口。",
+      "page": 3,
+      "path": "/paper-assets/lcdrive-2026/f2.webp",
+      "type": "architecture"
+    },
+    {
+      "id": "F3",
+      "caption": "Figure 3. Training strategy. We first use a base non-reasoning VLA to create latent CoT data, and cold start LCDrive by supervised learning. Then, we conduct reinforcement learning to activate useful reasoning capacity of LCDrive.",
+      "description": "三阶段训练流程图，保留 Stage 0 VLA Pretraining、Stage 1 Latent CoT Cold Start 和 Stage 2 Reinforcement Learning 标签。Stage 0 的 Driving Data 向下连接 Base VLA；Base VLA 分别连接 Stage 1 的 Latent CoT Data 和 Reasoning VLA，数据再向下连接 Reasoning VLA。Reasoning VLA 向右连接最终 LCDrive，Stage 2 中 GRPO 与 LCDrive 之间画有上下方向箭头。该图概括了基础模型初始化、潜在推理数据构造、监督冷启动和强化学习后训练的衔接。",
+      "page": 4,
+      "path": "/paper-assets/lcdrive-2026/f3.webp",
+      "type": "method_overview"
+    }
+  ],
+  "tags": [
+    "GRPO",
+    "PhysicalAI-AV",
+    "Vision-Language-Action",
+    "动作对齐",
+    "多分支推理",
+    "潜在世界模型",
+    "潜在思维链",
+    "端到端驾驶",
+    "自动驾驶"
+  ],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T12:14:27+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.1",
+    "source_hash": "28dc26e56f1a26d5eef151e3cc6796f7103cc38436c346cd89e7328587bc94ed",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

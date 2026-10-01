@@ -1,0 +1,729 @@
+{
+  "schema_version": "1.0",
+  "id": "focusdrive-2026",
+  "metadata": {
+    "title": "FOCUSDRIVE: REASONING WITH VISUAL FOCUS FOR AUTONOMOUS DRIVING",
+    "short_title": "FocusDrive",
+    "authors": [
+      "Zhiyuan Liu",
+      "Zehong Ke",
+      "Yuanxin Tian",
+      "Hao Cheng",
+      "Jinhao Li",
+      "Yining Xing",
+      "Yanbo Jiang",
+      "Zhenhua Xu",
+      "Wenhao Yu",
+      "Jianqiang Wang"
+    ],
+    "year": 2026,
+    "venue": "Preprint",
+    "doi": "",
+    "arxiv_id": "2609.33190",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "",
+    "code_url": "",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "FocusDrive 将决策相关对象的文字描述与图像块引用配对，使驾驶推理明确表达关注什么及其图像位置，并据此生成行动计划与轨迹。论文先通过驾驶员注视预测检验该表示，再利用既有 NAVSIM 训练场景中的驾驶焦点标注学习规划推理。W3DA 和 NAVSIM 实验显示，该方法具有较强的注视预测与端到端规划表现，并优于论文构建的文本 CoT 基线。",
+    "one_sentence": "FocusDrive 通过“对象描述＋图像块引用→行动计划→未来轨迹”的结构，将显式视觉焦点纳入自动驾驶推理。",
+    "research_problem": "驾驶模型的文本推理可以描述相关对象与应对动作，但生成序列与具体图像区域之间的对应关系仍然隐含。",
+    "motivation": "将决策相关对象明确连接到其图像位置和视觉表示，为后续驾驶响应提供可定位的视觉依据。",
+    "core_idea": "将对象描述与动态生成的图像块引用共同作为视觉焦点；引用既表示空间位置，也携带当前图像中对应区域的视觉表示。",
+    "method_summary": "在 Qwen3-VL-2B 上采用 PaDT 动态视觉引用机制；通过卷积适配器将图像块分数转换为注视热图，规划端则经过视觉引用预热、监督微调和以 PDMS 为奖励的 GRPO 微调，生成可选焦点、行动计划与航点。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E05",
+      "E06",
+      "E10",
+      "E13",
+      "E16"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "以显式视觉焦点组织驾驶推理",
+      "description": "提出结构化多模态 CoT，将对象识别、图像位置引用与后续驾驶响应和端到端规划连接起来。",
+      "evidence_ids": [
+        "E03",
+        "E09",
+        "E12"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "构建 NAVSIM 驾驶焦点监督",
+      "description": "在既有训练场景中，通过风险与 VLM 筛选、人工选择和修订，形成对象描述与图像位置配对的焦点标注；焦点标注覆盖 13.1% 的 Navtrain，全部训练场景仍保留规划监督。",
+      "evidence_ids": [
+        "E04",
+        "E05",
+        "E17"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "验证焦点表示及其规划收益",
+      "description": "通过 W3DA 注视预测验证空间表示，并在 NAVSIM 上展示规划表现；与自建文本 CoT 基线的对比和表示消融支持显式焦点、引用预热及图像条件引用输入的作用。",
+      "evidence_ids": [
+        "E21",
+        "E22",
+        "E23",
+        "E24",
+        "E25",
+        "E26"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "注视预测：驾驶图像、场景描述和任务指令。",
+      "端到端规划：1920 × 1080 前视摄像头图像、导航指令、自车速度和加速度。",
+      "训练监督：对象描述与空间标注、驾驶员注视图，以及行动计划和未来航点。"
+    ],
+    "outputs": [
+      "注视预测：稠密注视热图。",
+      "规划：可选的单对象视觉焦点描述及图像块引用、行动计划，以及自车坐标系下的未来轨迹。",
+      "轨迹包含 8 个航点，每个航点包含位置和航向，覆盖未来 4 秒，间隔 0.5 秒。"
+    ],
+    "components": [
+      {
+        "name": "驾驶焦点标注",
+        "description": "物理风险线索与 VLM 评估筛选候选场景及对象，再由人工确定对象和图像位置。位置映射到模型图像网格，与对象描述组成焦点片段。记录的未来自车路径仅用于离线标注，不作为规划策略训练或推理的观测输入。",
+        "evidence_ids": [
+          "E04",
+          "E05",
+          "E27"
+        ]
+      },
+      {
+        "name": "动态视觉引用机制",
+        "description": "采用 PaDT 机制，将视觉编码器的空间嵌入经层归一化及低秩残差投影转换为图像块原型。文本词表与当前图像的引用选项在同一输出分布中评分；生成引用后，其图像相关原型成为后续解码的输入嵌入。",
+        "evidence_ids": [
+          "E06",
+          "E07",
+          "E08",
+          "E09"
+        ]
+      },
+      {
+        "name": "注视适配器",
+        "description": "在引用生成前的位置，用语言模型隐状态对图像块原型评分；分数归一化并恢复到空间网格后，经五层卷积和双线性上采样生成热图。语言建模监督与热图的二元交叉熵、KL 散度联合训练模型和适配器。",
+        "evidence_ids": [
+          "E10",
+          "E11"
+        ]
+      },
+      {
+        "name": "焦点到行动的规划序列",
+        "description": "焦点片段由对象描述和图像块引用组成，随后生成行动计划与文本形式的未来航点。没有焦点标注的训练场景继续监督计划与轨迹；推理时模型自行生成是否包含焦点片段。",
+        "evidence_ids": [
+          "E12",
+          "E14",
+          "E28"
+        ]
+      },
+      {
+        "name": "分阶段规划训练",
+        "description": "首先以对象描述和图像块引用进行视觉引用预热，再以完整规划序列进行监督微调，两阶段均使用词元级交叉熵。随后使用 GRPO，以同场景采样轨迹的 PDMS 为奖励，并通过冻结的 SFT 策略进行 KL 正则化。",
+        "evidence_ids": [
+          "E13",
+          "E14",
+          "E15",
+          "E16"
+        ]
+      }
+    ],
+    "pipeline": [
+      "训练数据准备：筛选 NAVSIM 候选对象，人工确认描述和位置，将位置映射为图像块引用。",
+      "共享表示：编码图像并生成图像块原型，将其加入文本词表之外的动态输出选项。",
+      "注视分支：读取引用前的图像块分数，经适配器生成稠密热图。",
+      "规划训练：视觉引用预热→规划 SFT→以轨迹 PDMS 为奖励的 GRPO。",
+      "规划推理：输入前视图像与导航、自车状态，生成可选焦点→行动计划→8 个未来航点。"
+    ],
+    "details": "基础模型为 Qwen3-VL-2B，视觉引用投影器瓶颈宽度为 64。注视推理使用不含真实引用或注意解释的固定前缀，单次前向计算输出热图。规划推理采用确定性解码，每个场景输出一条轨迹，不使用随机采样、best-of-N 或重排序。",
+    "evidence_ids": [
+      "E04",
+      "E05",
+      "E06",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E18",
+      "E19",
+      "E28",
+      "E29",
+      "E30"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "W3DA：Normal 包含 DR(eye)VE 和 LBW，Safety 来自 BDD-A，Accident 来自 DADA-2000。",
+      "采用 G-W3DA 数据准备，包含 39,673 个训练帧和 21,985 个测试帧。",
+      "NAVSIM：在 Navtrain 训练，在 12,146 个 Navtest 场景评估；仅 Navtrain 提供焦点标注。"
+    ],
+    "benchmarks": [
+      "W3DA global driver gaze prediction",
+      "NAVSIM Navtest（非反应式仿真，PDMS 与 EPDMS）"
+    ],
+    "metrics": [
+      "KLdiv",
+      "CC",
+      "SIM",
+      "AUC-Judd（AUC-J）",
+      "AUC-Borji（AUC-B）",
+      "PDMS",
+      "EPDMS"
+    ],
+    "baselines": [
+      "DualGaze-VLM",
+      "Text CoT baseline（采用 Curious-VLA 的语言推理格式）",
+      "Text-2D",
+      "learned reference-ID embedding control"
+    ],
+    "main_results": [
+      {
+        "text": "FocusDrive 在 Normal、Safety、Accident 三组场景的 KLdiv、CC 和 AUC 指标上均取得所比较方法中的最佳结果，并在 Normal、Accident 的 SIM 上最佳；Safety 的 SIM 并非最佳。",
+        "evidence_ids": [
+          "E21"
+        ]
+      },
+      {
+        "text": "强化微调后的 FocusDrive 在 NAVSIM Navtest 上达到 91.1 PDMS 和 91.1 EPDMS；论文报告其领先于所比较的显式 CoT 规划器。",
+        "evidence_ids": [
+          "E22"
+        ]
+      },
+      {
+        "text": "相对自建文本 CoT 基线，完整焦点推理方案在 SFT 阶段提升 1.3 PDMS 和 1.4 EPDMS；强化微调后仍分别提升 0.9 和 1.0 分。",
+        "evidence_ids": [
+          "E23",
+          "E24"
+        ]
+      },
+      {
+        "text": "SFT 消融中，图像块引用在无预热时比 Text-2D 的两项规划分数各高 0.4 分，预热后各高 0.6 分；引用预热使 FocusDrive 再提升 0.3 PDMS 和 0.2 EPDMS。",
+        "evidence_ids": [
+          "E25",
+          "E26"
+        ]
+      },
+      {
+        "text": "保留动态图像块选择和空间索引时，以图像条件原型替代跨图像共享的引用 ID 输入嵌入，使 PDMS 和 EPDMS 各提升 0.3 分。",
+        "evidence_ids": [
+          "E31",
+          "E32"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E17",
+      "E20",
+      "E21",
+      "E22",
+      "E23",
+      "E24",
+      "E25",
+      "E26",
+      "E31",
+      "E32",
+      "E33",
+      "E34",
+      "E35",
+      "E36"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "驾驶焦点标注由一名标注者完成，尚未评估多名标注者之间的焦点选择一致性。",
+      "evidence_ids": [
+        "E37",
+        "E38"
+      ]
+    },
+    {
+      "text": "当前规划格式最多使用一个显式焦点引用；多个显式引用在复杂交互中的效果仍待研究。",
+      "evidence_ids": [
+        "E28",
+        "E39"
+      ]
+    },
+    {
+      "text": "论文指出，部分既有论文采用较早版本的 NAVSIM 结果，可能与本文更新实现下的 EPDMS 数值不一致，跨论文比较需考虑评估版本差异。",
+      "evidence_ids": [
+        "E40"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：核心价值在于把对象语义、空间位置及当前图像的区域表示共同放入行动生成序列。现有消融支持空间焦点和图像条件输入的增益，但相对文本 CoT 的完整方案同时改变了焦点监督与推理结构，尚不足以分别确定每项变化的独立因果贡献。注视预测提供空间建模证据，但不能单独证明规划解释忠实反映了动作生成的全部依据。",
+    "open_questions": [
+      "在保持监督信息与推理格式一致时，焦点监督、序列结构和视觉引用各自贡献多少？",
+      "对焦点引用进行受控替换或移除后，行动与轨迹是否随相关视觉证据发生一致变化？",
+      "多标注者之间的焦点一致性，以及多对象引用对复杂交互的作用如何？",
+      "在反应式交通环境中，规划收益能否保持？",
+      "模型的推理时延与轨迹生成稳定性是否满足实际驾驶需求？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "ABSTRACT",
+      "page": 1,
+      "content": "Text-based rationales can describe a driving response while leaving its correspondence to specific visual evidence implicit."
+    },
+    {
+      "id": "E02",
+      "section": "ABSTRACT",
+      "page": 1,
+      "content": "It pairs descriptions of decision-relevant objects with image-patch references, bringing explicit visual focus into the reasoning that generates driving plans and trajectories."
+    },
+    {
+      "id": "E03",
+      "section": "INTRODUCTION",
+      "page": 2,
+      "content": "a structured multimodal CoT framework that organizes driving reasoning around explicit visual focus"
+    },
+    {
+      "id": "E04",
+      "section": "INTRODUCTION",
+      "page": 3,
+      "content": "We develop driving-focus annotations within NAVSIM, capturing human selections of decision-relevant objects and their image locations"
+    },
+    {
+      "id": "E05",
+      "section": "3.2 DRIVING-FOCUS ANNOTATIONS",
+      "page": 4,
+      "content": "The automated stage directs annotation effort, while human judgment determines the final spatial target."
+    },
+    {
+      "id": "E06",
+      "section": "3.3 REPRESENTING VISUAL FOCUS",
+      "page": 4,
+      "content": "We implement image-patch references in the VLM using the dynamic visual-reference mechanism of PaDT (Su et al., 2026)."
+    },
+    {
+      "id": "E07",
+      "section": "3.3 REPRESENTING VISUAL FOCUS",
+      "page": 4,
+      "content": "It first applies layer normalization, then adds a low-rank residual projection implemented by two bias-free linear layers with a low-dimensional bottleneck."
+    },
+    {
+      "id": "E08",
+      "section": "3.3 REPRESENTING VISUAL FOCUS",
+      "page": 5,
+      "content": "Text and references are normalized within the same distribution, allowing both to appear in one autoregressive completion."
+    },
+    {
+      "id": "E09",
+      "section": "3.3 REPRESENTING VISUAL FOCUS",
+      "page": 5,
+      "content": "becomes the input embedding at that token position for subsequent decoding. Text tokens retain their learned embeddings."
+    },
+    {
+      "id": "E10",
+      "section": "3.4 FROM VISUAL REFERENCES TO GAZE PREDICTION",
+      "page": 5,
+      "content": "reshapes them onto the spatial grid, and decodes the dense map through five convolutional layers with bilinear upsampling."
+    },
+    {
+      "id": "E11",
+      "section": "3.4 FROM VISUAL REFERENCES TO GAZE PREDICTION",
+      "page": 5,
+      "content": "recorded gaze maps supervise the heatmap output through binary cross-entropy and KL divergence."
+    },
+    {
+      "id": "E12",
+      "section": "3.5 FROM VISUAL FOCUS TO END-TO-END PLANNING",
+      "page": 5,
+      "content": "its object description and patch reference provide spatial grounding and image-conditioned visual information for the subsequent action plan and future waypoints."
+    },
+    {
+      "id": "E13",
+      "section": "3.5.1 SUPERVISED LEARNING OF FOCUS-BASED REASONING",
+      "page": 5,
+      "content": "We begin with visual-reference token (VRT) warm-up, training the model to jointly describe and reference objects before learning complete planning sequences."
+    },
+    {
+      "id": "E14",
+      "section": "3.5.1 SUPERVISED LEARNING OF FOCUS-BASED REASONING",
+      "page": 6,
+      "content": "Both reference warm-up and planning SFT use token-level cross-entropy, with stage-specific contexts and target completions:"
+    },
+    {
+      "id": "E15",
+      "section": "3.5.2 REINFORCEMENT FINE-TUNING WITH GRPO",
+      "page": 6,
+      "content": "we use group relative policy optimization (GRPO) to compare sampled completions for the same observation and reinforce those with better driving outcomes."
+    },
+    {
+      "id": "E16",
+      "section": "3.5.2 REINFORCEMENT FINE-TUNING WITH GRPO",
+      "page": 6,
+      "content": "the completion receives the PDMS of this trajectory as its reward"
+    },
+    {
+      "id": "E17",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 7,
+      "content": "We add focus annotations to 13.1% of the existing Navtrain scenes and retain planning supervision on the full Navtrain set."
+    },
+    {
+      "id": "E18",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 7,
+      "content": "FocusDrive uses Qwen3-VL-2B (Bai et al., 2025) with a visualreference projector of bottleneck width r = 64."
+    },
+    {
+      "id": "E19",
+      "section": "3.1 TASK FORMULATION",
+      "page": 4,
+      "content": "the trajectory consists of $K = 8$ waypoints spanning four seconds at 0.5-second intervals."
+    },
+    {
+      "id": "E20",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 6,
+      "content": "using 39,673 training and 21,985 test frames."
+    },
+    {
+      "id": "E21",
+      "section": "4.2 MAIN RESULTS",
+      "page": 7,
+      "content": "It achieves the strongest KLdiv, CC, and AUC results across all three scenario groups, together with the highest SIM in Normal and Accident scenes."
+    },
+    {
+      "id": "E22",
+      "section": "4.2 MAIN RESULTS",
+      "page": 7,
+      "content": "FocusDrive reaches 91.1 PDMS and 91.1 EPDMS (Tables 2 and 3), leading the explicit CoT planners compared here."
+    },
+    {
+      "id": "E23",
+      "section": "4.3 ABLATION STUDIES AND ANALYSIS",
+      "page": 7,
+      "content": "This complete formulation improves SFT performance by 1.3 PDMS and 1.4 EPDMS."
+    },
+    {
+      "id": "E24",
+      "section": "4.3 ABLATION STUDIES AND ANALYSIS",
+      "page": 8,
+      "content": "the gains remain 0.9 and 1.0 points, respectively"
+    },
+    {
+      "id": "E25",
+      "section": "4.3 ABLATION STUDIES AND ANALYSIS",
+      "page": 8,
+      "content": "Patch references exceed Text-2D by 0.4 points on both metrics without reference warm-up and by 0.6 points with warm-up."
+    },
+    {
+      "id": "E26",
+      "section": "4.3 ABLATION STUDIES AND ANALYSIS",
+      "page": 8,
+      "content": "Reference warm-up further improves FocusDrive by 0.3 PDMS and 0.2 EPDMS."
+    },
+    {
+      "id": "E27",
+      "section": "A.3.1 DRIVING-FOCUS ANNOTATIONS",
+      "page": 17,
+      "content": "The recorded future ego path is used only for offline annotation"
+    },
+    {
+      "id": "E28",
+      "section": "A.3.2 PROMPT AND OUTPUT FORMATS",
+      "page": 18,
+      "content": "At inference, the model generates whether to include a focus span as part of its completion."
+    },
+    {
+      "id": "E29",
+      "section": "3.4 FROM VISUAL REFERENCES TO GAZE PREDICTION",
+      "page": 5,
+      "content": "A single forward pass then produces the heatmap through Eq. 2, without supplying the groundtruth reference or attention explanation."
+    },
+    {
+      "id": "E30",
+      "section": "A.3.3 TRAINING CONFIGURATION",
+      "page": 19,
+      "content": "we use deterministic decoding to produce one trajectory per scene, without stochastic sampling, best-of-N selection, or reranking."
+    },
+    {
+      "id": "E31",
+      "section": "4.3 ABLATION STUDIES AND ANALYSIS",
+      "page": 8,
+      "content": "we replace the selected patch prototype with a learned reference-ID embedding while retaining dynamic patch selection. Both variants retain spatial indexing."
+    },
+    {
+      "id": "E32",
+      "section": "4.3 ABLATION STUDIES AND ANALYSIS",
+      "page": 8,
+      "content": "This image-conditioned input improves PDMS and EPDMS by a further 0.3 points each"
+    },
+    {
+      "id": "E33",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 7,
+      "content": "NAVSIM (Dauner et al., 2024) evaluates end-to-end planning through non-reactive simulation on recorded driving scenes."
+    },
+    {
+      "id": "E34",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 7,
+      "content": "evaluate on the 12,146 Navtest scenarios using both PDMS from NAVSIM v1 and EPDMS introduced in NAVSIM v2."
+    },
+    {
+      "id": "E35",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 6,
+      "content": "We report KL divergence (KLdiv), correlation (CC), similarity (SIM), and AUC-Judd/AUC-Borji (AUC-J/AUC-B)"
+    },
+    {
+      "id": "E36",
+      "section": "4.3 ABLATION STUDIES AND ANALYSIS",
+      "page": 7,
+      "content": "our text CoT baseline, which follows the language-based reasoning format of Curious-VLA before waypoint generation (Chen et al., 2026)."
+    },
+    {
+      "id": "E37",
+      "section": "A.3.1 DRIVING-FOCUS ANNOTATIONS",
+      "page": 17,
+      "content": "A single annotator reviews the proposed objects, manually selects their image locations, revises object categories and descriptions, and removes incorrect annotations."
+    },
+    {
+      "id": "E38",
+      "section": "A.3.1 DRIVING-FOCUS ANNOTATIONS",
+      "page": 17,
+      "content": "Future work will extend annotation to multiple annotators to assess agreement in focus selection."
+    },
+    {
+      "id": "E39",
+      "section": "A.3.2 PROMPT AND OUTPUT FORMATS",
+      "page": 18,
+      "content": "Future work will examine whether multiple explicit references help in more complex interactions."
+    },
+    {
+      "id": "E40",
+      "section": "A.3.3 TRAINING CONFIGURATION",
+      "page": 19,
+      "content": "Some papers report earlier-version results that may not align with the updated values used in our table."
+    },
+    {
+      "id": "E41",
+      "section": "REFERENCES",
+      "page": 13,
+      "content": "Patch-as-decodable-token: Towards unified multi-modal vision tasks in mllms."
+    },
+    {
+      "id": "E42",
+      "section": "REFERENCES",
+      "page": 10,
+      "content": "Qwen3-vl technical report, 2025."
+    },
+    {
+      "id": "E43",
+      "section": "REFERENCES",
+      "page": 14,
+      "content": "Where, what, why: Towards explainable driver attention prediction."
+    },
+    {
+      "id": "E44",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 6,
+      "content": "W3DA (Zhou et al., 2025a) provides language-enriched driver gaze data"
+    },
+    {
+      "id": "E45",
+      "section": "REFERENCES",
+      "page": 11,
+      "content": "Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking."
+    },
+    {
+      "id": "E46",
+      "section": "REFERENCES",
+      "page": 11,
+      "content": "From scene to object: Text-guided dual-gaze prediction."
+    },
+    {
+      "id": "E47",
+      "section": "4.2 MAIN RESULTS",
+      "page": 7,
+      "content": "The largest correlation gain over DualGaze-VLM occurs in safety-critical scenes"
+    },
+    {
+      "id": "E48",
+      "section": "REFERENCES",
+      "page": 10,
+      "content": "Devil is in narrow policy: Unleashing exploration in driving vla models."
+    },
+    {
+      "id": "E49",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 7,
+      "content": "the input comprises a 1920 × 1080 front-camera image, navigation command, and ego velocity and acceleration."
+    },
+    {
+      "id": "E50",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 6,
+      "content": "Normal (DR(eye)VE (Alletto et al., 2016) and LBW (Kasahara et al., 2022)), Safety (BDD-A (Xia et al., 2018))"
+    },
+    {
+      "id": "E51",
+      "section": "4.1 EXPERIMENTAL SETUP",
+      "page": 6,
+      "content": "Accident (DADA-2000 (Fang et al., 2019)) scenarios."
+    },
+    {
+      "id": "E52",
+      "section": "3.5.1 SUPERVISED LEARNING OF FOCUS-BASED REASONING",
+      "page": 6,
+      "content": "Scenes without focus annotations still supervise the plan and future motion."
+    },
+    {
+      "id": "E53",
+      "section": "3.5.2 REINFORCEMENT FINE-TUNING WITH GRPO",
+      "page": 6,
+      "content": "while KL regularization constrains deviation from the SFT reference."
+    },
+    {
+      "id": "E54",
+      "section": "A.3.1 DRIVING-FOCUS ANNOTATIONS",
+      "page": 17,
+      "content": "We annotate only Navtrain and provide no focus annotations for Navtest, which is reserved for evaluation."
+    },
+    {
+      "id": "E55",
+      "section": "A.3.2 PROMPT AND OUTPUT FORMATS",
+      "page": 18,
+      "content": "we use an optional single reference to highlight a primary decisionrelevant object."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "Patch-as-decodable-token: Towards unified multi-modal vision tasks in mllms.",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "FocusDrive 明确采用该工作的动态视觉引用机制，在驾驶推理中生成图像块引用。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2026/file/ef3644ca8787131263600445b0461383-Paper-Conference.pdf",
+      "evidence_ids": [
+        "E06",
+        "E41"
+      ]
+    },
+    {
+      "title": "Qwen3-vl technical report",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "FocusDrive 使用 Qwen3-VL-2B 作为基础视觉语言模型。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2511.21631",
+      "url": "https://arxiv.org/abs/2511.21631",
+      "evidence_ids": [
+        "E18",
+        "E42"
+      ]
+    },
+    {
+      "title": "Where, what, why: Towards explainable driver attention prediction.",
+      "paper_id": null,
+      "relation_type": "uses_dataset",
+      "description": "论文使用其 W3DA 语言增强驾驶员注视数据进行全局注视预测实验。",
+      "source": "paper_reference",
+      "doi": "10.1109/ICCV51701.2025.00257",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E43",
+        "E44"
+      ]
+    },
+    {
+      "title": "Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking.",
+      "paper_id": "navsim-2024",
+      "relation_type": "uses_benchmark",
+      "description": "采用 NAVSIM 的 Navtrain/Navtest 训练与评估协议，报告 PDMS 和 EPDMS 规划分数。",
+      "source": "paper_reference",
+      "doi": "10.52202/079017-0902",
+      "arxiv_id": "",
+      "url": "https://proceedings.neurips.cc/paper_files/paper/2024/file/32768f7faf1995026ef9821c696f3404-Paper-Datasets_and_Benchmarks_Track.pdf",
+      "evidence_ids": [
+        "E33",
+        "E34",
+        "E45"
+      ]
+    },
+    {
+      "title": "From scene to object: Text-guided dual-gaze prediction.",
+      "paper_id": null,
+      "relation_type": "compares_with",
+      "description": "作为驾驶员注视预测的比较方法；论文分析了相对 DualGaze-VLM 的相关性提升。",
+      "source": "paper_reference",
+      "doi": "10.1109/JIOT.2026.3721773",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E46",
+        "E47"
+      ]
+    },
+    {
+      "title": "Devil is in narrow policy: Unleashing exploration in driving vla models.",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "论文自建文本 CoT 基线采用该工作 Curious-VLA 的语言推理格式，在生成航点前进行文本推理。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E36",
+        "E48"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F2",
+      "caption": "Figure 2: FocusDrive overview. Risk- and VLM-based screening followed by human review provides driving-focus annotations. Image-patch references support gaze prediction through an adapter and structured focus-to-action reasoning for planning, trained with reference warm-up, SFT, and PDMS-based GRPO.",
+      "description": "整体架构图保留 A、B、C、D 四个面板。A 展示风险与 VLM 筛选、人工选择图像块及修订描述，形成焦点、行动计划的标注样本。B 中图像经 Vision Encoder 产生视觉表示，Patch reference projector 生成图像块原型；LLM backbone 接收视觉与文本输入，Output Head 同时包含文本和图像块引用选项。C 明确显示图像块 logits→CNN gaze adapter→注视热图。D 展示三阶段规划训练：D1 对象描述与引用预热，D2 焦点、行动计划和轨迹的 SFT，D3 多个 rollout→Simulator→Reward→Policy loss。该图集中解释了标注、共享引用表示以及注视和规划两种用途。",
+      "page": 4,
+      "path": "/paper-assets/focusdrive-2026/f2.webp",
+      "type": "architecture"
+    },
+    {
+      "id": "F1",
+      "caption": "Figure 1: Compared with text-only CoT, FocusDrive explicitly links objects to image patches and structures reasoning around identifying and locating a key object, then determining the appropriate driving response.",
+      "description": "概念图以同一前视观测比较 Previous Text CoT VLA 与 FocusDrive。上方流程显示图像→VLA→文本推理和行动计划，并用文字说明对象与图像区域的连接仍然隐含。下方流程将输出候选扩展为文本词元和 Patch references，示例推理先明确关注前方车辆及其图像块，再给出停车直行的行动计划；箭头连接该焦点引用与 Visual focus distribution。右侧 Planned Trajectories 面板呈现两种方法的示例轨迹差异。该图解释核心设计动机；右侧案例属于作者的示例说明，不能单独代表整体规划表现。",
+      "page": 2,
+      "path": "/paper-assets/focusdrive-2026/f1.webp",
+      "type": "concept_overview"
+    }
+  ],
+  "tags": [],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T13:29:38+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.2",
+    "source_hash": "2d5bdd045655263f61314b9e16ba7f0f4eb414c5c42ea511c566e03c4b2ce7dd",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

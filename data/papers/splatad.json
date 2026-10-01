@@ -1,0 +1,810 @@
+{
+  "schema_version": "1.0",
+  "id": "splatad",
+  "metadata": {
+    "title": "SplatAD: Real-Time Lidar and Camera Rendering with 3D Gaussian Splatting for Autonomous Driving",
+    "short_title": "SplatAD",
+    "authors": [
+      "Georg Hess",
+      "Carl Lindstrom¨",
+      "Maryam Fatemi",
+      "Christoffer Petersson",
+      "Lennart Svensson"
+    ],
+    "year": null,
+    "venue": "",
+    "doi": "",
+    "arxiv_id": "2411.16816",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "https://research.zenseact.com/publications/splatad/",
+    "code_url": "",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "SplatAD 面向自动驾驶仿真，从车辆日志学习可同时渲染相机与激光雷达数据的动态场景表示。方法使用共享的三维高斯及可学习特征，结合传感器专用投影、分块和光栅化算法，建模滚动快门、激光雷达强度与射线丢失。在三个自动驾驶数据集上的实验显示，该方法提高了图像合成质量，并显著加快了相较于 NeRF 方法的渲染速度。",
+    "one_sentence": "SplatAD 通过共享三维高斯表示与传感器专用光栅化，实现动态驾驶场景中相机和激光雷达数据的实时渲染。",
+    "research_problem": "如何使用 3D Gaussian Splatting 高效、可微且逼真地统一渲染相机图像与稀疏激光雷达数据，并处理传感器运动和动态物体造成的滚动快门效应。",
+    "motivation": "自动驾驶的大规模仿真测试需要从采集日志构建逼真的数字孪生；现有联合渲染相机与激光雷达的 NeRF 方法速度较慢，而已有自动驾驶 3DGS 方法主要支持相机渲染。",
+    "core_idea": "共享静态背景与动态物体的高斯及特征表示，在相机空间和激光雷达球面空间分别执行投影、分块与滚动快门补偿，再通过专用解码器生成对应传感器数据。",
+    "method_summary": "相机分支采用规则分块、滚动快门补偿与 CNN 外观解码；激光雷达分支采用球面投影、非等距分块与逐射线光栅化，通过 MLP 预测强度和射线丢失概率，并输出距离。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E08",
+      "E14",
+      "E15",
+      "E24"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "面向稀疏激光雷达的高斯光栅化",
+      "description": "作者提出基于球面坐标的专用 CUDA 加速算法，使三维高斯能够直接渲染稀疏激光雷达点云。",
+      "evidence_ids": [
+        "E04",
+        "E13",
+        "E14"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "统一相机与激光雷达场景表示",
+      "description": "作者将 SplatAD 定位为首个从统一三维高斯表示渲染相机与激光雷达的 3DGS 方法，并用共享特征支持两种传感器。",
+      "evidence_ids": [
+        "E05",
+        "E08"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "高效的传感器特性建模",
+      "description": "方法同时处理滚动快门、激光雷达强度、射线丢失和传感器外观变化，采用传感器空间中的运动近似及专用神经解码器。",
+      "evidence_ids": [
+        "E06",
+        "E11",
+        "E12",
+        "E15"
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "跨数据集的质量与速度验证",
+      "description": "在 PandaSet、Argoverse2 和 nuScenes 上验证方法；图像新视角合成指标优于 NeuRAD，图像渲染速度提高一个数量级。",
+      "evidence_ids": [
+        "E20",
+        "E24"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "车辆日志中的相机图像和激光雷达点云",
+      "给定时间的相机或激光雷达位姿",
+      "动态物体的三维包围盒与 SE(3) 位姿序列",
+      "激光雷达射线的方位角、俯仰角与采集时间"
+    ],
+    "outputs": [
+      "相机 RGB 图像",
+      "激光雷达距离与三维点云",
+      "激光雷达强度",
+      "激光雷达射线丢失概率"
+    ],
+    "components": [
+      {
+        "name": "静态与动态高斯场景表示",
+        "description": "将场景分为静态背景和动态物体；动态物体的高斯存储在对应包围盒的局部坐标系中，并按物体位姿变换到世界坐标。高斯带有基础颜色和共享可学习特征，物体位姿及速度通过可学习偏移修正。",
+        "evidence_ids": [
+          "E07",
+          "E08",
+          "E09"
+        ]
+      },
+      {
+        "name": "相机投影与分块光栅化",
+        "description": "沿用投影、视锥剔除、分块分配、深度排序和分块光栅化步骤；对排序后的高斯颜色与特征进行 α 混合。",
+        "evidence_ids": [
+          "E10",
+          "E12"
+        ]
+      },
+      {
+        "name": "滚动快门补偿",
+        "description": "将传感器和动态物体引起的相对运动投影到传感器空间，在光栅化时按像素或激光雷达射线的采集时间调整高斯位置；激光雷达分支同时修正距离。",
+        "evidence_ids": [
+          "E11",
+          "E16",
+          "E17"
+        ]
+      },
+      {
+        "name": "相机外观解码",
+        "description": "小型 CNN 根据光栅化特征、射线方向和相机嵌入，预测作用于基础颜色的逐像素仿射变换，以建模视角相关外观及曝光差异。",
+        "evidence_ids": [
+          "E18",
+          "E19"
+        ]
+      },
+      {
+        "name": "激光雷达球面光栅化",
+        "description": "将高斯投影到方位角、俯仰角和距离构成的球面坐标；分块按固定数量的垂直激光通道及固定水平角分辨率组织，适应非等距扫描线。每个线程负责一条具有明确角度和采集时间的射线。",
+        "evidence_ids": [
+          "E13",
+          "E14",
+          "E21"
+        ]
+      },
+      {
+        "name": "激光雷达解码与距离输出",
+        "description": "将混合后的特征与射线方向拼接，由小型 MLP 预测强度和射线丢失概率。训练采用期望距离，推理采用中位距离，避免生成位于不同高斯之间的深度。",
+        "evidence_ids": [
+          "E15",
+          "E22"
+        ]
+      },
+      {
+        "name": "初始化与联合优化",
+        "description": "使用激光雷达点和随机点初始化高斯，以 MCMC 策略替代原始 3DGS 的分裂与增密策略。模型使用 Adam 联合训练 30,000 次迭代，论文报告单张 NVIDIA A100 上耗时约一小时。",
+        "evidence_ids": [
+          "E23",
+          "E25",
+          "E26"
+        ]
+      }
+    ],
+    "pipeline": [
+      "从相机、激光雷达和物体轨迹数据初始化静态及动态高斯。",
+      "根据目标采集时间和物体位姿组合场景。",
+      "分别执行相机透视投影与激光雷达球面投影。",
+      "按传感器特性分块、分配高斯并进行深度或距离排序。",
+      "按采集时间补偿滚动快门，并 α 混合颜色、特征或距离。",
+      "用 CNN 解码相机外观，用 MLP 解码激光雷达强度和射线丢失概率。",
+      "联合优化场景表示与解码器；推理时使用中位距离生成激光雷达点云。"
+    ],
+    "details": "滚动快门补偿的前向和反向过程，以及激光雷达投影与光栅化，采用专用 CUDA 核实现。",
+    "evidence_ids": [
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E17",
+      "E18",
+      "E19",
+      "E21",
+      "E22",
+      "E23",
+      "E25",
+      "E26",
+      "E27"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "PandaSet",
+      "Argoverse2",
+      "nuScenes"
+    ],
+    "benchmarks": [
+      "相机与激光雷达新视角合成：每个数据集选取 10 个序列，交替帧用于训练与留出验证",
+      "PandaSet 重建：在全部数据上训练，并在相同视角评估",
+      "图像外推：改变自车横向或垂直位置，以及动态物体的位置和旋转",
+      "跨三个数据集汇总的组件消融"
+    ],
+    "metrics": [
+      "PSNR",
+      "SSIM",
+      "LPIPS",
+      "median squared depth error",
+      "RMSE intensity error",
+      "ray drop accuracy",
+      "Chamfer distance",
+      "FD_DINOv2",
+      "Camera MP/s",
+      "Lidar MR/s",
+      "训练时间"
+    ],
+    "baselines": [
+      "UniSim",
+      "NeuRAD",
+      "PVG",
+      "Street Gaussians",
+      "OmniRe"
+    ],
+    "main_results": [
+      {
+        "text": "在三个数据集的图像新视角合成中，SplatAD 的所有图像质量指标均优于 NeuRAD，同时图像渲染速度提高一个数量级。",
+        "evidence_ids": [
+          "E20",
+          "E24"
+        ]
+      },
+      {
+        "text": "PandaSet 重建中，SplatAD 的 PSNR 为 29.74、SSIM 为 0.893、LPIPS 为 0.175，图像吞吐率为 114.4 MP/s；NeuRAD 分别为 26.76、0.778、0.233 和 9.8 MP/s。",
+        "evidence_ids": [
+          "E28",
+          "E29"
+        ]
+      },
+      {
+        "text": "激光雷达新视角合成中，SplatAD 在 PandaSet、Argoverse2 和 nuScenes 的 Chamfer distance 分别为 1.6、2.8 和 1.7，吞吐率分别为 19.5、9.5 和 5.7 MR/s。作者总体评价其点云质量与 NeuRAD 相当，速度最高提高约 18 倍。",
+        "evidence_ids": [
+          "E30",
+          "E31",
+          "E32",
+          "E33",
+          "E34"
+        ]
+      },
+      {
+        "text": "相机和激光雷达滚动快门建模的移除均降低新视角合成性能，但带来的速度改善很小。作者指出，滚动快门补偿对细结构和边缘的几何一致性尤其有帮助。",
+        "evidence_ids": [
+          "E35",
+          "E36",
+          "E37"
+        ]
+      },
+      {
+        "text": "消融实验表明，推理时使用中位距离而非期望距离有助于获得更逼真的激光雷达点云，尤其体现在 Chamfer distance 上。",
+        "evidence_ids": [
+          "E38"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E20",
+      "E24",
+      "E28",
+      "E29",
+      "E30",
+      "E31",
+      "E32",
+      "E33",
+      "E34",
+      "E35",
+      "E36",
+      "E37",
+      "E38",
+      "E39",
+      "E40",
+      "E41",
+      "E42",
+      "E43",
+      "E44",
+      "E45"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "当前所有动态物体都被建模为刚体，无法直接表示非刚性形变。",
+      "evidence_ids": [
+        "E46"
+      ]
+    },
+    {
+      "text": "激光雷达数据预处理中假设扫描期间自车作线性运动；该假设被违反时，单个分块可能被分配超过 256 个点，训练时会丢弃超额点，评估时则进行多次光栅化。",
+      "evidence_ids": [
+        "E47",
+        "E48",
+        "E49",
+        "E50"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：核心价值在于把共享场景表示与传感器专用计算结合起来，让高斯光栅化适应稀疏扫描和采集时序。实验支持其在所选数据集上的渲染质量与效率优势；这些结果对闭环自动驾驶测试效果的实际影响，仍需下游验证。对激光雷达基线的比较应结合评估协议理解，因为部分 3DGS 基线只在已有返回点上评估。",
+    "open_questions": [
+      "如何在保留渲染效率的同时，将动态物体表示扩展到行人等非刚性对象？",
+      "当扫描期间存在明显加速度或复杂转动时，传感器空间中的运动近似会产生多大误差？",
+      "渲染质量和速度的改进能否进一步改善闭环规划、感知测试及真实与仿真之间的一致性？",
+      "如何在相同射线丢失预测要求下，更全面地比较不同场景表示的激光雷达渲染能力？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "Abstract",
+      "page": 1,
+      "content": "we propose SplatAD, the first 3DGS-based method for realistic, real-time rendering of dynamic scenes for both camera and lidar data."
+    },
+    {
+      "id": "E02",
+      "section": "Abstract",
+      "page": 1,
+      "content": "existing neural radiance field (NeRF) methods for sensor-realistic rendering of camera and lidar data suffer from low rendering speeds"
+    },
+    {
+      "id": "E03",
+      "section": "1. Introduction",
+      "page": 1,
+      "content": "Data-driven methods that generate digital twins from collected logs offer a scalable way to build diverse, realistic simulation environments for testing."
+    },
+    {
+      "id": "E04",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "We propose the first method for efficient lidar rendering using 3D Gaussians, introducing custom CUDA-accelerated algorithms for rasterizing sparse point clouds in spherical coordinates."
+    },
+    {
+      "id": "E05",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "first 3DGS method capable of rendering both camera and lidar from a unified representation"
+    },
+    {
+      "id": "E06",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "enabling accurate handling of rolling shutter, lidar intensity, ray dropping, and variations in sensor appearance."
+    },
+    {
+      "id": "E07",
+      "section": "3.1. Scene representation",
+      "page": 3,
+      "content": "divide the scene into a static background and a set of dynamic actors."
+    },
+    {
+      "id": "E08",
+      "section": "Figure 2 caption",
+      "page": 3,
+      "content": "Our method projects 3D Gaussians with associated feature vectors onto the corresponding sensor modalities (camera and lidar)"
+    },
+    {
+      "id": "E09",
+      "section": "3.1. Scene representation",
+      "page": 3,
+      "content": "we adjust these with learnable offsets. Furthermore, each actor has a velocity initialized from pose differences and a learnable velocity offset."
+    },
+    {
+      "id": "E10",
+      "section": "3.2. Camera rendering",
+      "page": 3,
+      "content": "high-level steps—projection and view frustum culling, tile-assignment, depth sorting, and tile-based rasterization"
+    },
+    {
+      "id": "E11",
+      "section": "3.2. Camera rendering",
+      "page": 4,
+      "content": "each Gaussian’s velocity relative to the camera is projected to image space"
+    },
+    {
+      "id": "E12",
+      "section": "3.2. Camera rendering",
+      "page": 4,
+      "content": "we α-blend RGB values"
+    },
+    {
+      "id": "E13",
+      "section": "3.3. Lidar rendering",
+      "page": 5,
+      "content": "we transform Gaussian means from lidar coordinates to spherical coordinates"
+    },
+    {
+      "id": "E14",
+      "section": "3.3. Lidar rendering",
+      "page": 5,
+      "content": "we design tiles with a fixed number of diodes vertically and a fixed azimuth resolution horizontally."
+    },
+    {
+      "id": "E15",
+      "section": "3.3. Lidar rendering",
+      "page": 5,
+      "content": "The rendered features are concatenated with their corresponding ray direction and decoded to intensity and ray drop probability using a small MLP."
+    },
+    {
+      "id": "E16",
+      "section": "Figure 2 caption",
+      "page": 3,
+      "content": "the projected Gaussians are corrected for rolling shutter effects caused by the movement of sensors and, potentially, their own velocity."
+    },
+    {
+      "id": "E17",
+      "section": "3.3. Lidar rendering",
+      "page": 5,
+      "content": "To render the expected range of a point, we α-blend the rolling shutter corrected ranges for each Gaussian"
+    },
+    {
+      "id": "E18",
+      "section": "3.2. Camera rendering",
+      "page": 4,
+      "content": "View-dependent effects are modeled using a small CNN"
+    },
+    {
+      "id": "E19",
+      "section": "3.2. Camera rendering",
+      "page": 4,
+      "content": "the camera-specific learned embeddings enable modeling differences in exposure."
+    },
+    {
+      "id": "E20",
+      "section": "4. Experiments",
+      "page": 6,
+      "content": "We perform experiments on PandaSet [41], Argoverse2 [38] and nuScenes [5]."
+    },
+    {
+      "id": "E21",
+      "section": "3.3. Lidar rendering",
+      "page": 5,
+      "content": "Each thread is provided the azimuth, elevation, and capture time for it to rasterize."
+    },
+    {
+      "id": "E22",
+      "section": "3.3. Lidar rendering",
+      "page": 5,
+      "content": "While we use the expected range for training, the median range is used during inference"
+    },
+    {
+      "id": "E23",
+      "section": "3.4. Optimization and implementation",
+      "page": 6,
+      "content": "We initialize the set of Gaussians using both lidar points and random points."
+    },
+    {
+      "id": "E24",
+      "section": "4.1. Image rendering",
+      "page": 7,
+      "content": "our method improves upon NeuRAD’s SOTA results in all NVS metrics, while rendering images an order of magnitude faster."
+    },
+    {
+      "id": "E25",
+      "section": "3.4. Optimization and implementation",
+      "page": 6,
+      "content": "instead of the 3DGS [14] splitting and densification strategy, we rely on the MCMC strategy introduced in [16]."
+    },
+    {
+      "id": "E26",
+      "section": "3.4. Optimization and implementation",
+      "page": 6,
+      "content": "We train SplatAD for 30,000 iterations using the Adam optimizer, which takes an hour on a single NVIDIA A100."
+    },
+    {
+      "id": "E27",
+      "section": "3.4. Optimization and implementation",
+      "page": 6,
+      "content": "we implement the forward and backward passes of the rolling shutter compensation and lidar projection and rasterization using custom CUDA kernels."
+    },
+    {
+      "id": "E28",
+      "section": "Table 3",
+      "page": 8,
+      "content": "<td>SplatAD (ours)</td><td>29.74</td><td>0.893</td><td>0.175</td><td>0.02</td><td>0.053</td><td>97.4</td><td>1.6</td><td>114.4</td><td>17.4</td><td>1.0</td>"
+    },
+    {
+      "id": "E29",
+      "section": "Table 3",
+      "page": 8,
+      "content": "<td>NeuRAD</td><td>26.76</td><td>0.778</td><td>0.233</td><td>0.03</td><td>0.074</td><td>96.1</td><td>1.7</td><td>9.8</td><td>1.1</td><td>1.3</td>"
+    },
+    {
+      "id": "E30",
+      "section": "Table 2 — PandaSet",
+      "page": 7,
+      "content": "<td>SplatAD (ours)</td><td>0.01</td><td>0.059</td><td>96.7</td><td>1.6</td><td>19.5</td>"
+    },
+    {
+      "id": "E31",
+      "section": "Table 2 — Argo2",
+      "page": 7,
+      "content": "<td>SplatAD (ours)</td><td>0.02</td><td>0.052</td><td>92.6</td><td>2.8</td><td>9.5</td>"
+    },
+    {
+      "id": "E32",
+      "section": "Table 2 — nuScenes",
+      "page": 7,
+      "content": "<td>SplatAD (ours)</td><td>0.02</td><td>0.036</td><td>93.8</td><td>1.7</td><td>5.7</td>"
+    },
+    {
+      "id": "E33",
+      "section": "4.2. Lidar rendering",
+      "page": 8,
+      "content": "We find SplatAD to be on par with the accurate ray-tracing formulation of NeuRAD in terms of point cloud quality"
+    },
+    {
+      "id": "E34",
+      "section": "4.2. Lidar rendering",
+      "page": 8,
+      "content": "while running up to ×18 faster."
+    },
+    {
+      "id": "E35",
+      "section": "4.3. Ablations",
+      "page": 8,
+      "content": "removing the rolling shutter modeling of the camera (a) or lidar (f) reduces NVS performance"
+    },
+    {
+      "id": "E36",
+      "section": "4.3. Ablations",
+      "page": 8,
+      "content": "it is important for capturing thin structures and edges"
+    },
+    {
+      "id": "E37",
+      "section": "4.3. Ablations",
+      "page": 8,
+      "content": "we note the efficiency of our rolling shutter algorithms, as removing them barely improves rendering speeds."
+    },
+    {
+      "id": "E38",
+      "section": "4.3. Ablations",
+      "page": 8,
+      "content": "using median depth instead of expected depth during inference is important for realistic lidar data in terms of Chamfer distance (h)."
+    },
+    {
+      "id": "E39",
+      "section": "4. Experiments",
+      "page": 7,
+      "content": "We use the same 10 challenging sequences per dataset as in [35]"
+    },
+    {
+      "id": "E40",
+      "section": "4. Experiments",
+      "page": 7,
+      "content": "for novel view synthesis (NVS), use every other frame for training and the remaining frames for hold-out validation."
+    },
+    {
+      "id": "E41",
+      "section": "4. Experiments",
+      "page": 7,
+      "content": "namely, UniSim [45], NeuRAD [35], PVG [6], Street Gaussians [43] and OmniRe [7]."
+    },
+    {
+      "id": "E42",
+      "section": "4.1. Image rendering",
+      "page": 7,
+      "content": "using the standard NVS metrics PSNR, SSIM [37], and LPIPS [48] on hold-out validation images"
+    },
+    {
+      "id": "E43",
+      "section": "4.2. Lidar rendering",
+      "page": 8,
+      "content": "median squared depth error, RMSE intensity error, ray drop accuracy, and chamfer distance"
+    },
+    {
+      "id": "E44",
+      "section": "4.1. Image rendering",
+      "page": 7,
+      "content": "Here, methods train on all data in a sequence and evaluate on the same views."
+    },
+    {
+      "id": "E45",
+      "section": "4.1. Image rendering",
+      "page": 7,
+      "content": "We report the Frechet distance using DINOv2"
+    },
+    {
+      "id": "E46",
+      "section": "5. Conclusion — Limitations and future work",
+      "page": 8,
+      "content": "SplatAD is currently limited to modeling all dynamic actors as rigid."
+    },
+    {
+      "id": "E47",
+      "section": "A.2. Lidar points to rasterization points",
+      "page": 12,
+      "content": "we assume a linear motion during the lidar scan’s capture."
+    },
+    {
+      "id": "E48",
+      "section": "A.2. Lidar points to rasterization points",
+      "page": 13,
+      "content": "In some cases, this process can assign slightly more than 256 lidar points to a tile."
+    },
+    {
+      "id": "E49",
+      "section": "A.2. Lidar points to rasterization points",
+      "page": 13,
+      "content": "This occurs, for instance, if the linear motion assumption for the ego-motion removal is violated."
+    },
+    {
+      "id": "E50",
+      "section": "A.2. Lidar points to rasterization points",
+      "page": 13,
+      "content": "During training, we shuffle points for each iteration and discard any points beyond 256. For evaluation, we run multiple rasterization passes and concatenate the results."
+    },
+    {
+      "id": "E51",
+      "section": "References",
+      "page": 10,
+      "content": "Neurad: Neural rendering for autonomous driving."
+    },
+    {
+      "id": "E52",
+      "section": "References",
+      "page": 10,
+      "content": "Unisim: A neural closed-loop sensor simulator."
+    },
+    {
+      "id": "E53",
+      "section": "References",
+      "page": 9,
+      "content": "Periodic vibration gaussian: Dynamic urban scene reconstruction and real-time rendering. arXiv preprint arXiv:2311.18561"
+    },
+    {
+      "id": "E54",
+      "section": "References",
+      "page": 10,
+      "content": "Street gaussians for modeling dynamic urban scenes."
+    },
+    {
+      "id": "E55",
+      "section": "References",
+      "page": 9,
+      "content": "Omnire: Omni urban scene reconstruction. arXiv preprint arXiv:2408.16760"
+    },
+    {
+      "id": "E56",
+      "section": "References",
+      "page": 9,
+      "content": "3d gaussian splatting for real-time radiance field rendering."
+    },
+    {
+      "id": "E57",
+      "section": "3.1. Scene representation",
+      "page": 3,
+      "content": "Our scene representation builds upon 3DGS [14]"
+    },
+    {
+      "id": "E58",
+      "section": "References",
+      "page": 9,
+      "content": "3d gaussian splatting as markov chain monte carlo."
+    },
+    {
+      "id": "E59",
+      "section": "4. Experiments",
+      "page": 7,
+      "content": "As drivestudio lacks functionality for inferring missing lidar points, these baselines are evaluated only for existing points."
+    },
+    {
+      "id": "E60",
+      "section": "3.2. Camera rendering",
+      "page": 4,
+      "content": "it predicts a pixel-wise affine mapping"
+    },
+    {
+      "id": "E61",
+      "section": "3.1. Scene representation",
+      "page": 3,
+      "content": "their mean and covariance are expressed in the local coordinate system of the corresponding axis-aligned bounding box."
+    },
+    {
+      "id": "E62",
+      "section": "3.4. Optimization and implementation",
+      "page": 5,
+      "content": "All model components are optimized jointly using the loss"
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "Neurad: Neural rendering for autonomous driving",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "联合相机与激光雷达渲染的 NeRF 基线；用于质量和速度比较。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E41",
+        "E51"
+      ]
+    },
+    {
+      "title": "Unisim: A neural closed-loop sensor simulator",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "自动驾驶传感器渲染的 NeRF 基线。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E41",
+        "E52"
+      ]
+    },
+    {
+      "title": "Periodic vibration gaussian: Dynamic urban scene reconstruction and real-time rendering",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "动态城市场景的 3DGS 基线，论文以 PVG 标识。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2311.18561",
+      "url": "",
+      "evidence_ids": [
+        "E41",
+        "E53"
+      ]
+    },
+    {
+      "title": "Street gaussians for modeling dynamic urban scenes",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "动态驾驶场景的 3DGS 基线。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E41",
+        "E54"
+      ]
+    },
+    {
+      "title": "Omnire: Omni urban scene reconstruction",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "城市动态场景重建的 3DGS 基线。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2408.16760",
+      "url": "",
+      "evidence_ids": [
+        "E41",
+        "E55"
+      ]
+    },
+    {
+      "title": "3d gaussian splatting for real-time radiance field rendering",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "SplatAD 的场景表示与相机分块渲染建立在 3DGS 基础上。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E56",
+        "E57"
+      ]
+    },
+    {
+      "title": "3d gaussian splatting as markov chain monte carlo",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "SplatAD 采用其 MCMC 策略替代原始 3DGS 的分裂与增密策略。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E25",
+        "E58"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F2",
+      "caption": "Figure 2. Overview of our proposed method. Given the composition of static and dynamic 3D Gaussians, SplatAD is capable of differentiable rendering of both lidar and camera data. Our proposed lidar rendering matches the image rendering on a high level, but modifies each component to accurately model sensor characteristics. Our method projects 3D Gaussians with associated feature vectors onto the corresponding sensor modalities (camera and lidar) and employs sensor-specific tiling to match their distinct characteristics. During rasterization, the projected Gaussians are corrected for rolling shutter effects caused by the movement of sensors and, potentially, their own velocity. Finally, the rasterized features are decoded into the respective image and lidar point cloud representations.",
+      "description": "整体方法图。左侧展示带颜色、特征、均值、协方差和占据率的三维高斯场景，并以虚线连接到两种传感器投影。上方分支依次标注 Lidar Projection、Non-Equidistant Tiling 和 Rasterization w. Rolling Shutter，随后展示特征、MLP 及标为 Range 的输出箭头，右侧为点云。下方分支对应 Camera Projection、Regular Tiling、滚动快门光栅化、特征及 CNN，右侧为街景图像。光栅化模块中的红色箭头展示投影高斯的位移。结合图注，这张图说明共享高斯表示如何通过传感器专用计算生成两种输出，是解释论文核心方法的整体概览。",
+      "page": 3,
+      "path": "/paper-assets/splatad/f2.webp",
+      "type": "method_overview"
+    }
+  ],
+  "tags": [],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T13:42:10+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.2",
+    "source_hash": "c64e13ad8fc156fc04510f3f9554e42604d4e2e35f23f36f53dfaef9fd6953be",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

@@ -3,7 +3,9 @@
   { "label": "Projects", "path": "/projects", "enabled": true, "order": 2 },
   { "label": "Notes", "path": "/notes", "enabled": true, "order": 3 },
   { "label": "Experience", "path": "/experience", "enabled": true, "order": 4 },
-  { "label": "Research", "path": "/research", "enabled": false, "order": 5 },
-  { "label": "Tools", "path": "/tools", "enabled": false, "order": 6 },
-  { "label": "About", "path": "/about", "enabled": false, "order": 7 }
+  { "label": "Finances", "path": "/finances", "enabled": true, "order": 5 },
+  { "label": "Research", "path": "/research", "enabled": false, "order": 6 },
+  { "label": "Tools", "path": "/tools", "enabled": false, "order": 7 },
+  { "label": "About", "path": "/about", "enabled": false, "order": 8 },
+  { "label": "Papers", "path": "/papers", "enabled": true, "order": 9 }
 ]

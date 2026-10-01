@@ -1,0 +1,930 @@
+{
+  "schema_version": "1.0",
+  "id": "instant-nurec-2026",
+  "metadata": {
+    "title": "Instant NuRec: Feed-Forward 3D Gaussian Reconstruction for Driving Scene Simulation",
+    "short_title": "Instant NuRec",
+    "authors": [
+      "NVIDIA"
+    ],
+    "year": 2026,
+    "venue": "",
+    "doi": "",
+    "arxiv_id": "2607.14203",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "https://research.nvidia.com/labs/sil/projects/instant-nurec",
+    "code_url": "https://github.com/nvidia/instant-nurec",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "Instant NuRec 将短时、多相机驾驶记录通过前馈模型转换为可用于仿真的分层 3D Gaussian Splatting 世界，输出静态与动态高斯、天空立方体贴图及逐相机 ISP 校正，并通过 3DGUT 支持非针孔相机。论文报告重建 10–20 秒场景约需 1.5 秒，在 Waymo Open Dataset 上的 PSNR 比最强受评基线高 2.01 dB，并展示了与 NuRec 和 AlpaSim 的集成。",
+    "one_sentence": "通过共享多视图编码器和任务专用解码器，Instant NuRec 快速生成包含静态环境、动态轨迹与天空的驾驶场景表示，并用于闭环策略评估。",
+    "research_problem": "如何降低驾驶场景逐场景优化的计算成本，同时保留逼真渲染、静态与动态分解以及时空重定位所需的显式三维表示。",
+    "motivation": "逐场景优化需要数小时计算、超参数调整和辅助输入，限制了大规模驾驶记录进入闭环仿真系统的效率。",
+    "core_idea": "将重建成本摊销到离线训练：共享交替注意力编码器融合跨相机、跨时间信息，再由多个解码头生成几何、语义、高斯属性、运动、天空和相机颜色校正。",
+    "method_summary": "输入带标定和位姿的图像序列，预测稠密深度并提升为三维查询点；查询点交叉注意共享特征以预测高斯属性和位移，再依据语义划分静态、动态层。模型采用三阶段训练，长记录则通过重叠分块和视锥归属剪枝合并。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E16",
+      "E17"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "面向仿真的前馈分层重建",
+      "description": "从短时多视图驾驶记录生成静态高斯、动态高斯、天空贴图和逐相机颜色校正，可由 NuRec 与 AlpaSim 消费。",
+      "evidence_ids": [
+        "E01",
+        "E03",
+        "E04"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "共享编码器与查询式高斯、运动解码",
+      "description": "利用深度提升的三维查询点预测高斯属性及前后时间位移，以语义掩码分离可移动对象；提供 Dense 和 Selective 查询策略来调整高斯预算，重建时无需逐对象长方体轨迹。",
+      "evidence_ids": [
+        "E05",
+        "E06",
+        "E10",
+        "E11",
+        "E12",
+        "E13"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "分离几何与渲染监督的训练课程",
+      "description": "依次执行骨干预训练、几何与运动训练以及高斯渲染训练；最后阶段冻结编码器，避免尚不稳定的渲染梯度破坏几何特征。",
+      "evidence_ids": [
+        "E17",
+        "E18",
+        "E19"
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "长记录的视锥归属合并",
+      "description": "对重叠分块的静态高斯进行视锥归属剪枝，优先保留近距离观测块的预测，减少邻块远场高斯形成的漂浮伪影。",
+      "evidence_ids": [
+        "E16",
+        "E20",
+        "E21"
+      ]
+    },
+    {
+      "id": "C5",
+      "title": "闭环评估验证与 LiDAR 扩展",
+      "description": "在相同 AlpaSim 闭环设置下验证五种策略配置的排序与 NuRec 一致；另以轻量 LiDAR 分支扩展至范围和强度重建，并采用各向异性尺度下限缓解稀疏射线造成的几何碎裂。",
+      "evidence_ids": [
+        "E29",
+        "E30",
+        "E34",
+        "E35",
+        "E37"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "V×T RGB 图像；时间采样频率为 2–4 Hz",
+      "每幅图像的 6-DoF 位姿和相机内参",
+      "可选的动态对象长方体轨迹，用于推理时进一步校准动态高斯轨迹",
+      "LiDAR 扩展分支：包含逐束距离和强度的范围图"
+    ],
+    "outputs": [
+      "静态 3DGS 层：位置、尺度、旋转、透明度、颜色、法线与道路语义",
+      "动态 3DGS 层：三节点分段线性位置轨迹及高斯属性",
+      "六面天空立方体贴图",
+      "逐相机 3×4 仿射 RGB 校正",
+      "LiDAR 扩展：高斯几何及强度"
+    ],
+    "components": [
+      {
+        "name": "Shared Alternating-Attention Encoder",
+        "description": "基本沿用 Depth-Anything-3 的多视图骨干设计。图像划分为 14×14 patch，以相机位姿和视场构造逐图像 class token，并交替执行图像内与跨图像自注意力。",
+        "evidence_ids": [
+          "E07",
+          "E08",
+          "E09"
+        ]
+      },
+      {
+        "name": "Context-view decoders",
+        "description": "三个 DPT 融合头预测像素对齐的深度、法线与语义；语义类别为 road、movable、sky 和 ego-car。",
+        "evidence_ids": [
+          "E10"
+        ]
+      },
+      {
+        "name": "3DGS decoder 与查询点选择",
+        "description": "从预测深度提升三维查询点，以共享特征为 K、V 进行交叉注意力，输出高斯尺度、旋转与透明度等属性。Dense 使用所有像素；Selective 使用步长采样、查询聚类和专用道路分支降低预算。",
+        "evidence_ids": [
+          "E11",
+          "E12"
+        ]
+      },
+      {
+        "name": "Motion decoder",
+        "description": "共享三维查询点，联合预测同一相机相邻前后时间戳的两个三维位移；源时间调制特征，目标时间通过 AdaLN 调制解码。语义掩码仅将 movable 查询分配至动态层。",
+        "evidence_ids": [
+          "E13",
+          "E14"
+        ]
+      },
+      {
+        "name": "Sky decoder 与 ISP decoder",
+        "description": "天空分支以世界射线方向编码构造查询，交叉注意带相机射线嵌入的共享特征，并用 DPT 风格融合头上采样。ISP 分支预测逐相机仿射颜色变换，在光度损失计算前应用。",
+        "evidence_ids": [
+          "E15",
+          "E22"
+        ]
+      },
+      {
+        "name": "Long-clip Processing via Chunk Merging",
+        "description": "将长记录分为重叠短窗口；删除透明度低于 0.01 的高斯并转换到全局坐标系，再依据视锥可见性和相机距离对静态层执行归属剪枝，动态层不执行此剪枝。",
+        "evidence_ids": [
+          "E16",
+          "E20",
+          "E21",
+          "E23"
+        ]
+      },
+      {
+        "name": "LiDAR reconstruction branch",
+        "description": "保留预训练骨干，加入范围图编码器和高斯解码器，仅为有效回波生成靠近测量位置的高斯；预测几何属性和强度，并以角分辨率对应的束间距约束横向尺度下限。",
+        "evidence_ids": [
+          "E34",
+          "E35"
+        ]
+      }
+    ],
+    "pipeline": [
+      "将带标定、位姿的多视图图像编码为共享特征。",
+      "通过上下文头预测深度、法线和语义。",
+      "按 Dense 或 Selective 策略从深度提升三维查询点。",
+      "查询共享特征以预测高斯属性和前后时间位移。",
+      "根据语义掩码构建静态层和具有三节点轨迹的动态层，并行生成天空与 ISP 校正。",
+      "使用 3DGUT 渲染；较长记录经过重叠分块及静态高斯剪枝合并。",
+      "将分层表示用于 NuRec 与 AlpaSim；图示同时提供可选的逐场景优化路径。"
+    ],
+    "details": "训练目标由上下文、运动与渲染三组损失构成：深度、法线和语义分别使用 L1、余弦相似度和交叉熵；运动监督来自训练期长方体轨迹导出的三维流；新视图渲染采用 L1 与 LPIPS，并添加天空透明度损失。三阶段训练先进行深度与射线任务预训练，再以 LiDAR 和自动标签训练几何与运动，最后冻结编码器并启用高斯及 ISP 头。训练集约含 40K NVIDIA 内部驾驶片段，训练配置包括 1、3、5 相机及 8、12、18 时间帧；完整训练约需 8 节点运行 6 天。",
+    "evidence_ids": [
+      "E03",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E17",
+      "E18",
+      "E19",
+      "E20",
+      "E21",
+      "E22",
+      "E23",
+      "E24",
+      "E25",
+      "E34",
+      "E35",
+      "E45",
+      "E46",
+      "E47",
+      "E48",
+      "E49"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "Waymo Open Dataset validation split",
+      "NVIDIA 内部驾驶语料：约 40K 训练片段及留出的验证集",
+      "内部 Pandar128 LiDAR 数据的自定义划分"
+    ],
+    "benchmarks": [
+      "Waymo 新视图合成与稀疏 LiDAR 深度评估",
+      "内部数据重建质量、三维检测和运行时间比较",
+      "AlpaSim 闭环策略比较：140 场景，每场景 6 次试验，20 秒 rollout，每 500 ms 重规划",
+      "内部数据的训练课程、天空模型、损失与分块合并消融",
+      "内部 LiDAR 几何与强度重建评估"
+    ],
+    "metrics": [
+      "全图与动态区域 PSNR、SSIM",
+      "按帧最小二乘尺度对齐后的 AbsRel、δ1",
+      "下游三维检测 precision、recall",
+      "重建时间与 speedup",
+      "Collision（Front + Lateral + Rear）、Offroad 及两者平均",
+      "LiDAR Chamfer distance、表 3 的 Prec. 与 Cov.、强度 MAE"
+    ],
+    "baselines": [
+      "DepthSplat",
+      "STORM",
+      "Depth-Anything-3",
+      "DGGT",
+      "NVIDIA NuRec",
+      "single-stage training",
+      "sky MLP instead of cubemap",
+      "w/o LPIPS loss",
+      "w/o depth loss",
+      "w/o frustum-ownership merging",
+      "w/o scale floor"
+    ],
+    "main_results": [
+      {
+        "text": "Waymo 全图 PSNR 为 28.26 dB、SSIM 为 0.859，高于 DGGT 的 26.25 dB、0.805；全图 PSNR 优势为 2.01 dB。动态区域 PSNR 为 24.93 dB、SSIM 为 0.793，DGGT 对应为 21.76 dB、0.652。",
+        "evidence_ids": [
+          "E26",
+          "E27"
+        ]
+      },
+      {
+        "text": "Waymo 经尺度对齐后的全图深度 AbsRel 为 0.076、δ1 为 0.937；动态区域分别为 0.085、0.922。",
+        "evidence_ids": [
+          "E26",
+          "E28"
+        ]
+      },
+      {
+        "text": "内部比较报告 Dense 和 Selective 均约 1.5 秒完成场景重建，NuRec 约需 75 分钟；Select ive 在该验证集将高斯预算降至约三分之一，但外观和检测指标有小幅下降，Dense 质量更高。",
+        "evidence_ids": [
+          "E31",
+          "E32"
+        ]
+      },
+      {
+        "text": "在 140 场景、每场景 6 次试验的闭环评估中，Instant NuRec 与 NuRec 对五种策略配置给出相同排序；评估采用碰撞与驶离道路指标。",
+        "evidence_ids": [
+          "E29",
+          "E30",
+          "E50"
+        ]
+      },
+      {
+        "text": "内部消融中，完整模型 PSNR 为 29.93 dB；联合单阶段训练为 27.65，天空 MLP 为 26.73，移除 LPIPS 为 26.81，移除深度损失为 28.92，移除视锥归属合并为 26.10。完整模型并未在每个指标上均占优：单阶段训练的 δ1 为 0.955，完整模型为 0.950。",
+        "evidence_ids": [
+          "E33"
+        ]
+      },
+      {
+        "text": "LiDAR 扩展重建约需 20 秒，相对约 75 分钟的 NuRec 加速约 225 倍；Chamfer distance 为 0.286，对比 NuRec 的 0.204，强度 MAE 为 0.027，对比 0.028。移除尺度下限后 Chamfer distance 增至 0.936。",
+        "evidence_ids": [
+          "E36",
+          "E37"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E24",
+      "E26",
+      "E27",
+      "E28",
+      "E29",
+      "E30",
+      "E31",
+      "E32",
+      "E33",
+      "E36",
+      "E37",
+      "E38",
+      "E39",
+      "E40",
+      "E50",
+      "E51",
+      "E52",
+      "E53"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "高斯数量与重建质量存在权衡：接近逐场景优化质量可能需要大量基元，而小预算容易欠采样细结构。",
+      "evidence_ids": [
+        "E41"
+      ]
+    },
+    {
+      "text": "泛化受训练语料限制；与训练配置明显不同的相机系统，例如低安装位置或全鱼眼配置，目前需要微调。",
+      "evidence_ids": [
+        "E42"
+      ]
+    },
+    {
+      "text": "三关键帧分段线性轨迹无法捕捉亚秒级非刚体运动，例如行人关节运动。",
+      "evidence_ids": [
+        "E43"
+      ]
+    },
+    {
+      "text": "LiDAR 扩展相较 NuRec 的几何覆盖更不完整，导致更高的 Chamfer distance，尽管强度预测相近。",
+      "evidence_ids": [
+        "E37",
+        "E44"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：本文的价值在于把快速前馈重建连接到显式分层表示和实际策略比较。现有闭环结果支持所测场景与策略范围内的排序一致性，尚不足以推断所有策略、场景或安全事件下均可替代逐场景优化。训练依赖 LiDAR 和自动长方体标签，因此推理时无需对象轨迹并不意味着训练无需此类监督。深度评估使用逐帧尺度对齐，也不能单独证明绝对尺度精度。",
+    "open_questions": [
+      "在更多罕见场景和差异更小的策略之间，闭环排序及碰撞、驶离道路指标是否仍一致？",
+      "约 1.5 秒重建时间在不同硬件、相机数量和片段长度下如何变化？",
+      "基线使用公开检查点，而模型使用内部语料；如何区分架构收益与训练数据收益？",
+      "不进行逐帧尺度对齐时，绝对深度和碰撞几何的误差如何？",
+      "更密集的运动节点能否改善行人关节运动，同时控制动态高斯预算？",
+      "测试时优化或流式条件化能否改善细结构和长记录重建，并保留速度优势？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "Abstract",
+      "page": 1,
+      "content": "a feed-forward neural reconstruction model that turns a short multi-view driving log into a fully simulatable 3D Gaussian Splatting (3DGS) world"
+    },
+    {
+      "id": "E02",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "each new clip requires hours of computation, careful hyperparameter tuning, and a large set of auxiliary inputs"
+    },
+    {
+      "id": "E03",
+      "section": "Abstract",
+      "page": 1,
+      "content": "static and dynamic 3DGS layers, a sky cubemap, and per-camera ISP corrections, while providing native support for non-pinhole camera models via 3DGUT [2]."
+    },
+    {
+      "id": "E04",
+      "section": "Abstract",
+      "page": 1,
+      "content": "Instant NuRec is deeply integrated into NuRec and is compatible with AlpaSim [3] for closed-loop simulation."
+    },
+    {
+      "id": "E05",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "Instant NuRec couples a single shared encoder with a set of lightweight task-specific decoders."
+    },
+    {
+      "id": "E06",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "the dynamic layer requires no per-actor cuboid tracks at reconstruction time."
+    },
+    {
+      "id": "E07",
+      "section": "3.1. Problem Formulation",
+      "page": 4,
+      "content": "Each image $\\mathbf { I } _ { v , t }$ is paired with its 6-DoF pose"
+    },
+    {
+      "id": "E08",
+      "section": "3.2. Shared Alternating-Attention Encoder",
+      "page": 4,
+      "content": "We largely follow the backbone design of Depth-Anything-3 [63], which repurposes the DINOv2 [64] architecture for multi-view inputs."
+    },
+    {
+      "id": "E09",
+      "section": "3.2. Shared Alternating-Attention Encoder",
+      "page": 5,
+      "content": "Each image is split into non-overlapping 14×14 patches, each of which is linearly projected to a token of dimension 𝐶."
+    },
+    {
+      "id": "E10",
+      "section": "3.3. Decoding Heads",
+      "page": 5,
+      "content": "we attach three DPT heads: one each for depth, normals, and semantic logits."
+    },
+    {
+      "id": "E11",
+      "section": "3.3. Decoding Heads",
+      "page": 5,
+      "content": "Each query point in Q is a 3D position lifted from the predicted depth map and embedded by a lightweight learned projection."
+    },
+    {
+      "id": "E12",
+      "section": "3.3. Decoding Heads",
+      "page": 5,
+      "content": "**Selective**, which uses strided sampling and cross-attention to sparsify queries and includes a dedicated road branch for road-dominated regions."
+    },
+    {
+      "id": "E13",
+      "section": "3.3. Decoding Heads",
+      "page": 5,
+      "content": "we jointly predict two 3D displacements, one for each target timestamp, yielding a 6-D regression target."
+    },
+    {
+      "id": "E14",
+      "section": "3.3. Decoding Heads",
+      "page": 5,
+      "content": "assigning only points classified as movable to the dynamic layer and the remainder to the static layer."
+    },
+    {
+      "id": "E15",
+      "section": "3.3. Decoding Heads",
+      "page": 6,
+      "content": "For each cubemap pixel, we form a query by sinusoidally encoding its world-space ray direction."
+    },
+    {
+      "id": "E16",
+      "section": "3.4. Long-clip Processing via Chunk Merging",
+      "page": 6,
+      "content": "reconstructing an entire driving log requires processing it in overlapping chunks and merging the per-chunk predictions into a single global field."
+    },
+    {
+      "id": "E17",
+      "section": "4.1. Losses and Training Curriculum",
+      "page": 7,
+      "content": "We therefore divide the full training process into a three-stage curriculum:"
+    },
+    {
+      "id": "E18",
+      "section": "4.1. Losses and Training Curriculum",
+      "page": 7,
+      "content": "The encoder is frozen, and the camera-ISP and GS decoders are enabled."
+    },
+    {
+      "id": "E19",
+      "section": "4.1. Losses and Training Curriculum",
+      "page": 7,
+      "content": "it prevents high-variance rendering gradients from corrupting the well-conditioned geometry features learned in Stage 2"
+    },
+    {
+      "id": "E20",
+      "section": "3.4. Long-clip Processing via Chunk Merging",
+      "page": 6,
+      "content": "a Gaussian 𝑔 from chunk 𝑖 is kept only if no other chunk $j$ observes it from substantially closer range."
+    },
+    {
+      "id": "E21",
+      "section": "3.4. Long-clip Processing via Chunk Merging",
+      "page": 6,
+      "content": "we leave the dynamic layer untouched and apply the pruning to the static layer only."
+    },
+    {
+      "id": "E22",
+      "section": "3.3. Decoding Heads",
+      "page": 6,
+      "content": "The transform is initialized to the identity and applied to rendered colors before the photometric loss is computed."
+    },
+    {
+      "id": "E23",
+      "section": "3.4. Long-clip Processing via Chunk Merging",
+      "page": 6,
+      "content": "transform the surviving primitives into a global world frame using the chunk-level pose."
+    },
+    {
+      "id": "E24",
+      "section": "4.2. Implementation Details",
+      "page": 7,
+      "content": "Instant NuRec is trained on ∼40K filtered driving clips drawn from NVIDIA’s Autonomous Vehicle (AV) data platform."
+    },
+    {
+      "id": "E25",
+      "section": "4.2. Implementation Details",
+      "page": 8,
+      "content": "The complete three-stage training process takes ∼6 days on 8 nodes."
+    },
+    {
+      "id": "E26",
+      "section": "5.1. Comparison on the Waymo Open Dataset",
+      "page": 9,
+      "content": "<td>Ours</td><td>28.26</td><td>0.859</td><td>0.076</td><td>0.937</td><td>24.93</td><td>0.793</td><td>0.085</td><td>0.922</td>"
+    },
+    {
+      "id": "E27",
+      "section": "5.1. Comparison on the Waymo Open Dataset",
+      "page": 9,
+      "content": "<td>DGGT [35]</td><td>26.25</td><td>0.805</td><td>0.135</td><td>0.841</td><td>21.76</td><td>0.652</td><td>0.249</td><td>0.689</td>"
+    },
+    {
+      "id": "E28",
+      "section": "5.1. Comparison on the Waymo Open Dataset",
+      "page": 8,
+      "content": "we align each prediction with the LiDAR depth using a per-frame least-squares scale"
+    },
+    {
+      "id": "E29",
+      "section": "5.2. Comparisons and Applications on Internal Data",
+      "page": 10,
+      "content": "the policy ranking under Instant NuRec is identical to that under NuRec"
+    },
+    {
+      "id": "E30",
+      "section": "5.2. Comparisons and Applications on Internal Data",
+      "page": 10,
+      "content": "Each scene is rolled out for 20 s in closed loop, with policy replanning every 500 ms and six independent trials per scene."
+    },
+    {
+      "id": "E31",
+      "section": "5.2. Comparisons and Applications on Internal Data",
+      "page": 10,
+      "content": "both reconstruct a scene in ∼1.5 s versus ∼75 min for NuRec, a speedup of more than three orders of magnitude"
+    },
+    {
+      "id": "E32",
+      "section": "5.2. Comparisons and Applications on Internal Data",
+      "page": 10,
+      "content": "Selective incurs a modest reduction in appearance and detection metrics while using roughly one-third of the Gaussian budget."
+    },
+    {
+      "id": "E33",
+      "section": "5.3. Ablation Study",
+      "page": 13,
+      "content": "| Instant NuRec (full) | 29.93 | 0.793 | 0.069 | 0.950 |"
+    },
+    {
+      "id": "E34",
+      "section": "5.4. Extension to LiDAR Reconstruction",
+      "page": 13,
+      "content": "We retain the pretrained Instant NuRec backbone and add a lightweight LiDAR branch"
+    },
+    {
+      "id": "E35",
+      "section": "5.4. Extension to LiDAR Reconstruction",
+      "page": 13,
+      "content": "we impose an anisotropic scale floor inspired by Mip-Splatting [75]."
+    },
+    {
+      "id": "E36",
+      "section": "5.4. Extension to LiDAR Reconstruction",
+      "page": 14,
+      "content": "| Instant NuRec LiDAR | 0.286 | 0.113 | 0.173 | 0.027 | ∼20s | ∼225× |"
+    },
+    {
+      "id": "E37",
+      "section": "5.4. Extension to LiDAR Reconstruction",
+      "page": 14,
+      "content": "our method has higher CD, mainly because of coverage rather than precision, indicating well-localized but less complete geometry."
+    },
+    {
+      "id": "E38",
+      "section": "5.1. Comparison on the Waymo Open Dataset",
+      "page": 8,
+      "content": "Our evaluation follows the protocol used by STORM [33]."
+    },
+    {
+      "id": "E39",
+      "section": "5.1. Comparison on the Waymo Open Dataset",
+      "page": 8,
+      "content": "We compare against representative feed-forward reconstruction methods: DepthSplat [29], STORM [33], Depth-Anything-3 [63], and DGGT [35]."
+    },
+    {
+      "id": "E40",
+      "section": "5.4. Extension to LiDAR Reconstruction",
+      "page": 14,
+      "content": "We evaluate on a custom split of our internal data collected with a Pandar128 LiDAR."
+    },
+    {
+      "id": "E41",
+      "section": "6. Discussion and Conclusion",
+      "page": 15,
+      "content": "matching the quality of per-scene optimization can require many primitives, while a smaller budget under-samples thin structures."
+    },
+    {
+      "id": "E42",
+      "section": "6. Discussion and Conclusion",
+      "page": 15,
+      "content": "rigs that differ substantially from those seen in training (e.g., low-mounted or fisheye-only setups) currently require fine-tuning."
+    },
+    {
+      "id": "E43",
+      "section": "6. Discussion and Conclusion",
+      "page": 15,
+      "content": "the three-keyframe piecewise-linear actor trajectories cannot capture sub-second non-rigid motion, such as pedestrian articulation."
+    },
+    {
+      "id": "E44",
+      "section": "5.4. Extension to LiDAR Reconstruction",
+      "page": 14,
+      "content": "Intensity prediction remains comparable."
+    },
+    {
+      "id": "E45",
+      "section": "4.1. Losses and Training Curriculum",
+      "page": 7,
+      "content": "supervised by 3D scene flow derived from cuboid tracks for foreground pixels and a zero-displacement target for background pixels."
+    },
+    {
+      "id": "E46",
+      "section": "4.1. Losses and Training Curriculum",
+      "page": 7,
+      "content": "the context heads receive dense, well-conditioned supervision from LiDAR and auto-labels."
+    },
+    {
+      "id": "E47",
+      "section": "4.1. Losses and Training Curriculum",
+      "page": 7,
+      "content": "We reproduced the Depth-Anything-3 pretraining protocol using the depth- and ray-prediction tasks from [63]"
+    },
+    {
+      "id": "E48",
+      "section": "4.1. Losses and Training Curriculum",
+      "page": 7,
+      "content": "computed after applying the predicted camera-ISP affine transform."
+    },
+    {
+      "id": "E49",
+      "section": "3.3. Decoding Heads",
+      "page": 6,
+      "content": "no iterative optimization is performed at inference."
+    },
+    {
+      "id": "E50",
+      "section": "5.2. Comparisons and Applications on Internal Data",
+      "page": 12,
+      "content": "averaged over 140 scenes × 6 trials."
+    },
+    {
+      "id": "E51",
+      "section": "5.1. Comparison on the Waymo Open Dataset",
+      "page": 8,
+      "content": "We evaluate the baseline methods using their released checkpoints without further fine-tuning."
+    },
+    {
+      "id": "E52",
+      "section": "5.1. Comparison on the Waymo Open Dataset",
+      "page": 8,
+      "content": "The model observes four context frames spaced 0.5 s apart and is evaluated on the held-out target frames."
+    },
+    {
+      "id": "E53",
+      "section": "5.1. Comparison on the Waymo Open Dataset",
+      "page": 8,
+      "content": "All RGB metrics are computed after resizing the predictions and ground truth to the STORM resolution of 240 × 160 pixels."
+    },
+    {
+      "id": "E54",
+      "section": "References",
+      "page": 16,
+      "content": "3DGUT: Enabling distorted cameras and secondary rays in gaussian splatting."
+    },
+    {
+      "id": "E55",
+      "section": "References",
+      "page": 16,
+      "content": "AlpaSim: A modular, lightweight, and data-driven research simulator for autonomous driving."
+    },
+    {
+      "id": "E56",
+      "section": "References",
+      "page": 17,
+      "content": "DepthSplat: Connecting gaussian splatting and depth."
+    },
+    {
+      "id": "E57",
+      "section": "References",
+      "page": 18,
+      "content": "STORM: Spatio-temporal reconstruction model for large-scale outdoor scenes."
+    },
+    {
+      "id": "E58",
+      "section": "References",
+      "page": 18,
+      "content": "DGGT: Feedforward 4D reconstruction of dynamic driving scenes using unposed images. arXiv preprint arXiv:2512.03004"
+    },
+    {
+      "id": "E59",
+      "section": "References",
+      "page": 20,
+      "content": "Depth Anything 3: Recovering the visual space from any views. arXiv preprint arXiv:2511.10647"
+    },
+    {
+      "id": "E60",
+      "section": "References",
+      "page": 20,
+      "content": "Scalability in perception for autonomous driving: Waymo Open Dataset."
+    },
+    {
+      "id": "E61",
+      "section": "References",
+      "page": 20,
+      "content": "Mip-Splatting: Alias-free 3D gaussian splatting."
+    },
+    {
+      "id": "E62",
+      "section": "References",
+      "page": 16,
+      "content": "NVIDIA. NuRec. Website, 2026."
+    },
+    {
+      "id": "E63",
+      "section": "5.3. Ablation Study",
+      "page": 13,
+      "content": "| single-stage training | 27.65 | 0.751 | 0.077 | 0.955 |"
+    },
+    {
+      "id": "E64",
+      "section": "5.3. Ablation Study",
+      "page": 13,
+      "content": "| sky MLP instead of cubemap | 26.73 | 0.692 | 0.068 | 0.950 |"
+    },
+    {
+      "id": "E65",
+      "section": "5.3. Ablation Study",
+      "page": 13,
+      "content": "| w/o LPIPS loss | 26.81 | 0.705 | 0.073 | 0.934 |"
+    },
+    {
+      "id": "E66",
+      "section": "5.3. Ablation Study",
+      "page": 13,
+      "content": "| w/o depth loss | 28.92 | 0.782 | 0.103 | 0.862 |"
+    },
+    {
+      "id": "E67",
+      "section": "5.3. Ablation Study",
+      "page": 13,
+      "content": "| w/o frustum-ownership merging | 26.10 | 0.648 | 0.098 | 0.891 |"
+    },
+    {
+      "id": "E68",
+      "section": "5.4. Extension to LiDAR Reconstruction",
+      "page": 14,
+      "content": "| NuRec [1] | 0.204 | 0.080 | 0.124 | 0.028 | ∼75min | 1× |"
+    },
+    {
+      "id": "E69",
+      "section": "5.4. Extension to LiDAR Reconstruction",
+      "page": 14,
+      "content": "| w/o scale floor | 0.936 | 0.195 | 0.741 | 0.036 | - | - |"
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "NuRec",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "内部重建、闭环比较和 LiDAR 实验中的逐场景优化参照。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "https://research.nvidia.com/labs/sil/nurec/",
+      "evidence_ids": [
+        "E31",
+        "E62",
+        "E68"
+      ]
+    },
+    {
+      "title": "3DGUT: Enabling distorted cameras and secondary rays in gaussian splatting",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "用作可微渲染器，并提供非针孔相机支持。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E03",
+        "E54"
+      ]
+    },
+    {
+      "title": "AlpaSim: A modular, lightweight, and data-driven research simulator for autonomous driving",
+      "paper_id": null,
+      "relation_type": "related",
+      "description": "接收重建场景并用于闭环策略评估的仿真系统。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "https://github.com/NVlabs/alpasim",
+      "evidence_ids": [
+        "E04",
+        "E29",
+        "E55"
+      ]
+    },
+    {
+      "title": "DepthSplat: Connecting gaussian splatting and depth",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "Waymo 上受评的前馈重建基线。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E39",
+        "E56"
+      ]
+    },
+    {
+      "title": "STORM: Spatio-temporal reconstruction model for large-scale outdoor scenes",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "Waymo 前馈重建基线；本文采用其评估协议和图像分辨率。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E38",
+        "E39",
+        "E53",
+        "E57"
+      ]
+    },
+    {
+      "title": "DGGT: Feedforward 4D reconstruction of dynamic driving scenes using unposed images",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "Waymo 前馈重建比较基线，表 1 中具有最高的基线全图 PSNR。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2512.03004",
+      "url": "",
+      "evidence_ids": [
+        "E27",
+        "E39",
+        "E58"
+      ]
+    },
+    {
+      "title": "Depth Anything 3: Recovering the visual space from any views",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "编码器设计与预训练协议的来源，同时也是 Waymo 比较基线。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2511.10647",
+      "url": "",
+      "evidence_ids": [
+        "E08",
+        "E39",
+        "E47",
+        "E59"
+      ]
+    },
+    {
+      "title": "Scalability in perception for autonomous driving: Waymo Open Dataset",
+      "paper_id": null,
+      "relation_type": "uses_dataset",
+      "description": "提供公开验证集，用于新视图图像质量和稀疏 LiDAR 深度评估。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E28",
+        "E52",
+        "E60"
+      ]
+    },
+    {
+      "title": "Mip-Splatting: Alias-free 3D gaussian splatting",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "LiDAR 分支的各向异性高斯尺度下限受其启发。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E35",
+        "E61"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F4",
+      "caption": "Figure 2: Pipeline overview. Multi-view driving images are tokenized into patches and processed by an alternating-attention ViT encoder. Several decoder heads share the resulting latent features and produce depth maps, semantic labels, motion estimates, a sky cubemap, and 3DGS attributes. Optionally, the output can be further optimized on a per-scene basis and used for downstream simulation tasks.",
+      "description": "图中左侧的 Posed Multi-view Input Frames 进入重复 L 次的 Alternating Attention Blocks。共享特征通过标为 K、V 的蓝色箭头连接 3DGS、Motion 和 Sky 解码器；上方 Context Decoder 展示 Depth、Normal、Semantics，其中深度位置标出的查询点通过红色 Q 路径连接高斯及运动解码器。Motion 分支还显示源时间 t_src 和目标时间 t_tgt，Sky 分支显示方向查询。右侧分别展示 3D Gaussians、Dynamic Actors 和 Sky Cubemap，并汇入 Simulation-ready 3D Reconstruction；上方 Collision Geometry 也以向下箭头接入该节点。绿色重建节点连接 Closed-loop Simulation，虚线路径标明可选的 Per-scene Optimization。该图集中呈现共享编码、多头解码、分层表示及仿真接口，是解释本文核心方法的总览。",
+      "page": 4,
+      "path": "/paper-assets/instant-nurec-2026/f4.webp",
+      "type": "architecture"
+    }
+  ],
+  "tags": [
+    "3D Gaussian Splatting",
+    "Instant NuRec",
+    "LiDAR 重建",
+    "前馈三维重建",
+    "动态场景重建",
+    "多视图",
+    "自动驾驶",
+    "闭环仿真"
+  ],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T12:08:12+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.1",
+    "source_hash": "6a45d60ac550bca301d2c674210ab49f2387227006efb8557d46ef9ddf57334b",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

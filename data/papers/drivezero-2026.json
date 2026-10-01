@@ -1,0 +1,838 @@
+{
+  "schema_version": "1.0",
+  "id": "drivezero-2026",
+  "metadata": {
+    "title": "DriveZero: End-to-End Driving Beyond Human Demonstrations",
+    "short_title": "DriveZero",
+    "authors": [
+      "AD & Robotics, L3 Team"
+    ],
+    "year": 2026,
+    "venue": "Technical Report",
+    "doi": "",
+    "arxiv_id": "2609.06055",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "https://xiaomiautol3.github.io/DriveZero",
+    "code_url": "",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "本文将端到端驾驶分解为感知与动作模型，分别预训练后通过蒸馏统一。DriveRL 在真实日志初始化的混合交通仿真中，以闭环 PPO 从零学习特权驾驶策略；DriveVFM 将多个冻结视觉基础模型蒸馏为无需驾驶任务标注的视觉骨干。DriveZero 使用相机图像，通过教师轨迹蒸馏、候选评分和目标增强学习规划，不使用人类轨迹作为监督。DriveRL 的 nuPlan 六项评估平均分经测试时搜索达到 93.57；加入 SimScale 数据的 DriveZero-Scale 在 NAVSIMv1、NAVSIMv2 和 HUGSIM 上分别取得 95.3 PDMS、57.1 EPDMS 和 46.6 HD-Score。",
+    "one_sentence": "DriveZero 将闭环强化学习教师与多教师视觉预训练结合，通过目标增强轨迹蒸馏训练无需人类轨迹监督的相机端到端规划器。",
+    "research_problem": "如何突破人类驾驶日志中单一未来轨迹和有限行为覆盖的约束，同时避免直接视觉强化学习所需的高成本闭环探索与渲染。",
+    "motivation": "感知需要大规模、多样的视觉数据，动作学习需要交互反馈；分别采用适合两者的训练方式，再将闭环学到的驾驶行为转移到相机规划器。",
+    "core_idea": "以结构化状态训练目标条件强化学习教师，以冻结视觉基础模型训练感知骨干，再用教师生成的多目标轨迹监督统一两者。",
+    "method_summary": "DriveRL 通过 PPO 学习连续控制，并可用价值引导搜索重排动作；DriveVFM 聚合 DINOv3、SigLIP2、SAM 和 Depth Anything V2 特征；DriveZero 生成多个轨迹候选，以 WTA 蒸馏和 PDM 分量评分训练，推理时选取得分最高的候选。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E14",
+      "E21",
+      "E22",
+      "E24",
+      "E25",
+      "E27"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "感知与动作分开预训练，再通过蒸馏统一",
+      "description": "DriveVFM 从图像学习视觉表示，DriveRL 从结构化世界的闭环交互学习驾驶行为，DriveZero 将两者结合为相机端到端规划器。",
+      "evidence_ids": [
+        "E03",
+        "E04",
+        "E05",
+        "E06"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "混合交通闭环强化学习与价值引导动作搜索",
+      "description": "DriveRL 使用日志回放、规则行为和学习策略共同构成交互世界，从随机初始化训练 PPO 教师；推理时结合短期奖励与 critic 评价候选动作，并以切换阈值保守替换策略众数。",
+      "evidence_ids": [
+        "E06",
+        "E07",
+        "E08",
+        "E09",
+        "E10"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "无需驾驶任务标注的多教师视觉蒸馏",
+      "description": "DriveVFM 将 DINOv3、SigLIP2、SAM 和 Depth Anything V2 的互补特征聚合到单一骨干，以 PHI-S 平衡异构教师的空间特征。",
+      "evidence_ids": [
+        "E05",
+        "E11",
+        "E12"
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "目标增强的教师轨迹蒸馏",
+      "description": "DriveZero 在日志帧上接受冻结教师的轨迹监督，使用 WTA 轨迹损失和独立候选评分；改变驾驶意图后重新查询教师，使同一场景产生多个与目标一致的监督轨迹。",
+      "evidence_ids": [
+        "E14",
+        "E15",
+        "E16",
+        "E17",
+        "E18"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "DriveRL：自车状态、周围交通参与者历史、局部矢量地图、交通灯状态与导航目标点。",
+      "DriveVFM：原始图像及冻结视觉基础模型提供的特征监督。",
+      "DriveZero：当前帧多视角相机图像、自车运动学状态和导航指令；训练时使用对应结构化状态生成教师轨迹。"
+    ],
+    "outputs": [
+      "DriveRL：纵向 jerk 与轮胎转向角速度的有界 Beta 分布及执行动作。",
+      "DriveVFM：共享视觉骨干的图像与空间表示。",
+      "DriveZero：多个轨迹候选及其预测质量分数，推理时输出聚合评分最高的轨迹。"
+    ],
+    "components": [
+      {
+        "name": "DriveRL 教师与混合交通仿真",
+        "description": "特权教师从结构化观测和目标点预测连续动作。混合交通仿真通过统一物理状态—动作接口组合日志回放、IDM、紧急制动及可选自博弈行为。教师从零训练，无模仿预训练，日志用于初始化场景和导航目标。",
+        "evidence_ids": [
+          "E06",
+          "E07",
+          "E08",
+          "E19"
+        ]
+      },
+      {
+        "name": "价值引导测试时动作搜索",
+        "description": "保留 Beta 策略众数并采样替代首动作，分别进行短期 rollout，以折扣奖励加终点 critic 值评分。只有最佳采样动作比众数高出阈值时才切换。",
+        "evidence_ids": [
+          "E09",
+          "E10",
+          "E20"
+        ]
+      },
+      {
+        "name": "DriveVFM",
+        "description": "共享 Vision Transformer 蒸馏多个冻结教师。摘要特征使用余弦距离，空间特征使用均方误差；PHI-S 标准化空间特征。预训练混合通用图像与驾驶图像，不需要检测、分割、车道或深度任务标注。",
+        "evidence_ids": [
+          "E05",
+          "E11",
+          "E12",
+          "E13"
+        ]
+      },
+      {
+        "name": "DriveZero 轨迹生成与评分",
+        "description": "DriveVFM 编码相机图像，register tokens 压缩视觉信息；导航指令与自车运动学信息条件化轨迹查询。轨迹解码器生成候选，评分分支预测六项 PDM 分量。轨迹蒸馏仅更新最接近教师轨迹的候选，评分分支单独接受 PDM 目标监督。",
+        "evidence_ids": [
+          "E14",
+          "E15",
+          "E16",
+          "E17",
+          "E23",
+          "E38"
+        ]
+      },
+      {
+        "name": "目标增强",
+        "description": "在相同初始场景下改变驾驶意图及对应导航指令，再生成教师轨迹；同一增强路线也用于候选评分，保持指令、轨迹与评分一致。",
+        "evidence_ids": [
+          "E18",
+          "E39"
+        ]
+      }
+    ],
+    "pipeline": [
+      "从真实 nuPlan 日志初始化混合交通交互世界。",
+      "以 PPO 从随机初始化训练目标条件 DriveRL 教师和 critic。",
+      "以冻结视觉基础模型特征预训练 DriveVFM。",
+      "在配对的图像与结构化日志帧上，冻结教师生成轨迹，并通过目标增强扩展监督。",
+      "训练 DriveZero 的多候选轨迹生成器与 PDM 评分分支。",
+      "移除教师，仅由相机规划器生成并选择轨迹；DriveRL 单独部署时可使用价值引导动作搜索。"
+    ],
+    "details": "DriveZero 学生在日志帧上开环训练，不进入交互环境，也不需要渲染。主实验使用 DriveVFM ViT-L，骨干权重冻结，仅训练 rank-32 Q/V LoRA 适配器及规划模块。规划器生成 64 个候选；教师与学生轨迹均为 20 步。DriveRL 训练采用 96 GPUs、每 rank 2,048 个世界和 110 步 rollout；DriveZero 训练 25 epochs，batch size 为 256。",
+    "evidence_ids": [
+      "E06",
+      "E07",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E17",
+      "E18",
+      "E19",
+      "E20",
+      "E23",
+      "E37",
+      "E38",
+      "E39",
+      "E40"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "nuPlan trainval：DriveRL 使用 922,703 个场景。",
+      "DriveVFM 预训练：LAION-2B、ImageNet-21K、SA-1B、OpenDV、nuPlan 和 Waymo 图像。",
+      "NAVSIM navtrain：100K 场景，用于 DriveZero 训练。",
+      "SimScale：237K OOD 仿真场景，用于 DriveZero-Scale 数据扩展。"
+    ],
+    "benchmarks": [
+      "nuPlan：Val14、Test14-hard、Test14-random，各含 non-reactive 与 reactive 闭环模式。",
+      "NAVSIMv1 navtest：伪闭环评估。",
+      "NAVSIMv2 navhard：两阶段伪闭环评估。",
+      "HUGSIM：Easy、Medium、Hard、Extreme 真闭环零样本迁移评估。"
+    ],
+    "metrics": [
+      "nuPlan closed-loop score（CLS）",
+      "Predictive Driver Model Score（PDMS）及安全、合规、舒适与进度分量",
+      "Extended Predictive Driver Model Score（EPDMS）及两阶段分数",
+      "HUGSIM route completion（RC）",
+      "HUGSIM HD-Score"
+    ],
+    "baselines": [
+      "Log-Replay",
+      "CaRL",
+      "GigaFlow",
+      "Human Driver",
+      "PDM-Closed",
+      "DrivoR-Scale",
+      "GigaPixel",
+      "DINOv3 ViT-S",
+      "人类轨迹监督",
+      "仅 DriveRL 轨迹监督"
+    ],
+    "main_results": [
+      {
+        "text": "DriveRL 在 nuPlan 六项闭环评估中取得 93.01 的非加权平均分，每项均超过 Log-Replay；同一 checkpoint 加入价值引导搜索后达到 93.57，提高 0.56 分。",
+        "evidence_ids": [
+          "E21",
+          "E22"
+        ]
+      },
+      {
+        "text": "DriveZero 在 NAVSIMv1 navtest 上取得 94.8 PDMS，与 Human Driver 的 94.8 持平；加入 SimScale 数据的 DriveZero-Scale 达到 95.3 PDMS。",
+        "evidence_ids": [
+          "E24",
+          "E25"
+        ]
+      },
+      {
+        "text": "DriveZero 在 NAVSIMv2 navhard 上取得 51.5 EPDMS；DriveZero-Scale 提高至 57.1。扩展数据使 Stage 1 分数下降 1.8 分，但 Stage 2 提高 8.3 分。",
+        "evidence_ids": [
+          "E26",
+          "E41"
+        ]
+      },
+      {
+        "text": "DriveZero-Scale 在 HUGSIM 上无需专门微调，平均 HD-Score 为 46.6，比 GigaPixel 的 38.5 高 8.1 分。",
+        "evidence_ids": [
+          "E27",
+          "E28",
+          "E42"
+        ]
+      },
+      {
+        "text": "ViT-S、仅 navtrain 的监督消融中，直接使用 DriveRL 轨迹的 PDMS 为 93.61，低于人类轨迹监督的 93.92；加入目标增强后达到 94.41。目标增强是教师监督超过人类监督的关键因素。",
+        "evidence_ids": [
+          "E29",
+          "E30",
+          "E31"
+        ]
+      },
+      {
+        "text": "DriveVFM ViT-S 达到 94.41 PDMS，高于 DINOv3 ViT-S 的 93.88。多教师消融中，加入 SAM 将 PDMS 从 93.69 提高到 94.10，再加入 Depth Anything V2 提高到 94.41。",
+        "evidence_ids": [
+          "E32",
+          "E33"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E13",
+      "E19",
+      "E21",
+      "E22",
+      "E24",
+      "E25",
+      "E26",
+      "E27",
+      "E28",
+      "E29",
+      "E30",
+      "E31",
+      "E32",
+      "E33",
+      "E37",
+      "E40",
+      "E41",
+      "E42",
+      "E43",
+      "E44",
+      "E45",
+      "E46",
+      "E47"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "测试时搜索的背景交通 rollout 与 critic 均为近似估计，小分差可能只是噪声；论文以切换阈值限制动作替换，并将 rollout 定位为局部短期评价。",
+      "evidence_ids": [
+        "E10",
+        "E34"
+      ]
+    },
+    {
+      "text": "自博弈在 nuPlan 上没有显示一致的性能优势；作者指出该基准以 IDM 驱动背景车辆，未必奖励更自然的交互行为。",
+      "evidence_ids": [
+        "E35",
+        "E48"
+      ]
+    },
+    {
+      "text": "nuPlan 聚合分数不包含交通灯违规，因此不能单独反映红灯合规性改善；独立消融中加入交通灯奖励降低违规率，同时降低六项聚合分数。",
+      "evidence_ids": [
+        "E36",
+        "E49"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：本文最有说服力的机制证据是目标增强消融，而非仅将人类轨迹替换为教师轨迹。其“超越人类示范”应结合具体基准及评分规则理解；日志仍用于场景、图像和导航目标构建。可能的局限推断是：学生开环蒸馏能否完整继承教师在偏离日志状态后的恢复行为，现有结果尚不足以直接回答。",
+    "open_questions": [
+      "目标增强在不同道路类型与困难交互场景中的覆盖度和有效性如何？",
+      "学生自身诱发的分布偏移，会在多大程度上削弱教师闭环恢复能力的转移？",
+      "测试时搜索的收益与推理延迟、背景交通近似误差之间如何权衡？",
+      "相机 DriveZero 的真实道路闭环表现如何？论文的真实道路部署段落讨论的是 DriveRL。",
+      "若同时约束红灯合规与基准聚合分数，整体安全性和驾驶效率会如何变化？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "1 Introduction",
+      "page": 1,
+      "content": "Each logged scene contains only one realized future, even when multiple actions would be valid;"
+    },
+    {
+      "id": "E02",
+      "section": "3. Performance",
+      "page": 2,
+      "content": "direct visual RL couples sample-intensive exploration with costly visual simulation, limiting its scalability [62]."
+    },
+    {
+      "id": "E03",
+      "section": "Abstract",
+      "page": 1,
+      "content": "It decomposes driving into a perception model and an action model, pretrains each in the regime best suited to it,"
+    },
+    {
+      "id": "E04",
+      "section": "2 Methodology",
+      "page": 3,
+      "content": "Our methodology consists of three stages: learning driving behavior, pretraining visual representations, and transferring the learned behavior to a camera-only policy."
+    },
+    {
+      "id": "E05",
+      "section": "Abstract",
+      "page": 1,
+      "content": "including DINOv3, SigLIP2, SAM and Depth Anything V2, into a single backbone from raw images alone, requiring no task-specific annotations."
+    },
+    {
+      "id": "E06",
+      "section": "2.1 DriveRL: Learning a Privileged Teacher from Scratch with Closed-Loop RL",
+      "page": 3,
+      "content": "It starts from random initialization and receives no imitation pretraining; logged data only seeds the scenes and navigation goals."
+    },
+    {
+      "id": "E07",
+      "section": "2.1.2 Mixed-Agent Simulation",
+      "page": 4,
+      "content": "The runtime supports three provider categories: log replay, rule-based behaviors such as IDM and front-vehicle braking, and learned policies such as Self-Play."
+    },
+    {
+      "id": "E08",
+      "section": "2.1 DriveRL: Learning a Privileged Teacher from Scratch with Closed-Loop RL",
+      "page": 3,
+      "content": "DriveRL is optimized with PPO [68] against a reward that combines hard safety events, goal arrival, and soft driving-quality terms."
+    },
+    {
+      "id": "E09",
+      "section": "2.1.3 Value-Guided Test-Time Action Search",
+      "page": 5,
+      "content": "we retain the mode of the Beta policy as candidate 0 and sample N −1 alternative first actions from the same policy."
+    },
+    {
+      "id": "E10",
+      "section": "2.1.3 Value-Guided Test-Time Action Search",
+      "page": 6,
+      "content": "Because both the background-actor rollout and the critic are approximate, a small score difference may be noise rather than a better action."
+    },
+    {
+      "id": "E11",
+      "section": "2.2 DriveVFM: Distilling Multiple Vision Foundation Models into One Driving Backbone",
+      "page": 7,
+      "content": "Summary features are matched by cosine distance, while spatial patch features are optimized by mean-squared error."
+    },
+    {
+      "id": "E12",
+      "section": "2.2 DriveVFM: Distilling Multiple Vision Foundation Models into One Driving Backbone",
+      "page": 7,
+      "content": "DriveVFM therefore applies PHI Standardization (PHI-S) [59] to each model’s patch features."
+    },
+    {
+      "id": "E13",
+      "section": "2.2 DriveVFM: Distilling Multiple Vision Foundation Models into One Driving Backbone",
+      "page": 7,
+      "content": "LAION-2B [67], ImageNet-21K [63], and SA-1B [35] with driving images sampled from OpenDV [89], nuPlan [2], and Waymo [72]."
+    },
+    {
+      "id": "E14",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 7,
+      "content": "It is a camera-only end-to-end planner trained open-loop on logged frames, and the training targets come from rolling out the frozen teacher"
+    },
+    {
+      "id": "E15",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 8,
+      "content": "only the closest proposal contributes to the trajectory loss:"
+    },
+    {
+      "id": "E16",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 8,
+      "content": "These components are supervised by their corresponding PDM targets [17]."
+    },
+    {
+      "id": "E17",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 8,
+      "content": "At inference time, DriveZero selects the candidate with the highest predicted aggregate score."
+    },
+    {
+      "id": "E18",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 8,
+      "content": "Goal augmentation therefore expands each logged scene into multiple valid supervision targets and directly exploits the generative capability of the closed-loop RL teacher."
+    },
+    {
+      "id": "E19",
+      "section": "3.1 DriveRL",
+      "page": 9,
+      "content": "DriveRL is trained with 2,048 worlds per rank on 96 GPUs, using 110-step rollouts at 5 Hz"
+    },
+    {
+      "id": "E20",
+      "section": "2.1.3 Value-Guided Test-Time Action Search",
+      "page": 5,
+      "content": "Reusing the training reward, discount factor, and critic keeps candidate ranking aligned with the objective optimized by PPO."
+    },
+    {
+      "id": "E21",
+      "section": "3.1.1 Closed-Loop Comparison",
+      "page": 9,
+      "content": "DriveRL obtains an unweighted mean score of 93.01 across the six evaluations and exceeds Log-Replay in every non-reactive and reactive setting,"
+    },
+    {
+      "id": "E22",
+      "section": "3.1.1 Closed-Loop Comparison",
+      "page": 9,
+      "content": "Applying value-guided test-time action search to the same checkpoint raises the mean score by 0.56 points to 93.57,"
+    },
+    {
+      "id": "E23",
+      "section": "3.2 DriveZero",
+      "page": 10,
+      "content": "the DriveVFM backbone remains frozen, with only rank-32 Q/V LoRA adapters [27] left trainable."
+    },
+    {
+      "id": "E24",
+      "section": "3. Performance",
+      "page": 3,
+      "content": "DriveZero reaches 94.8 PDMS on NAVSIMv1 navtest without any human trajectory supervision, on par with the human driver (94.8)."
+    },
+    {
+      "id": "E25",
+      "section": "3.2.1 Main Results of the End-to-End Student",
+      "page": 12,
+      "content": "Scaling with OOD simulation data from SimScale [76] further improves DriveZero-Scale to 95.3 PDMS,"
+    },
+    {
+      "id": "E26",
+      "section": "3.2.1 Main Results of the End-to-End Student",
+      "page": 12,
+      "content": "DriveZero achieves an EPDMS of 51.5, outperforming all methods trained exclusively on the navtrain split."
+    },
+    {
+      "id": "E27",
+      "section": "3.2.1 Main Results of the End-to-End Student",
+      "page": 12,
+      "content": "resulting in an average HD-Score of 46.6."
+    },
+    {
+      "id": "E28",
+      "section": "3.2 DriveZero",
+      "page": 11,
+      "content": "Zero-shot means no HUGSIM-specific finetuning is used."
+    },
+    {
+      "id": "E29",
+      "section": "3.2.2 Ablation Studies",
+      "page": 14,
+      "content": "Although using DriveRL trajectories alone yields a slightly lower PDMS than human supervision (93.61 versus 93.92),"
+    },
+    {
+      "id": "E30",
+      "section": "3.2.2 Ablation Studies",
+      "page": 14,
+      "content": "adding goal augmentation raises the score substantially to 94.41, outperforming DriveRL-only supervision by 0.80 points and the human-trajectory baseline by 0.49 points."
+    },
+    {
+      "id": "E31",
+      "section": "3.2.2 Ablation Studies",
+      "page": 13,
+      "content": "All ablations use a ViT-S backbone and the navtrain split without SimScale data, and are evaluated on NAVSIMv1 navtest."
+    },
+    {
+      "id": "E32",
+      "section": "3.2.2 Ablation Studies",
+      "page": 13,
+      "content": "DriveVFM achieves a PDMS of 94.41, outperforming the DINOv3 ViT-S baseline at 93.88 by 0.53 points."
+    },
+    {
+      "id": "E33",
+      "section": "3.2.2 Ablation Studies",
+      "page": 14,
+      "content": "Adding SAM improves PDMS from 93.69 to 94.10 (+0.41), while further incorporating Depth Anything V2 raises it to 94.41 (+0.31)."
+    },
+    {
+      "id": "E34",
+      "section": "2.1.3 Value-Guided Test-Time Action Search",
+      "page": 5,
+      "content": "The rollout is deliberately short, intended to expose immediate differences in safety, route compliance, and comfort rather than to model long-horizon traffic interaction."
+    },
+    {
+      "id": "E35",
+      "section": "A.5.2 Self-Play Study",
+      "page": 28,
+      "content": "demonstrating the feasibility of the one-policy, per-actor formulation but not a consistent performance advantage from Self-Play."
+    },
+    {
+      "id": "E36",
+      "section": "A.5.3 Traffic-Light Input and Reward",
+      "page": 29,
+      "content": "the aggregate nuPlan score alone does not capture the improvement in red-light compliance, since traffic-light violations are not part of the benchmark score."
+    },
+    {
+      "id": "E37",
+      "section": "3.2 DriveZero",
+      "page": 10,
+      "content": "We additionally use 237K out-of-distribution (OOD) simulation scenes from SimScale [76] for data scaling, and denote the resulting variant as DriveZero-Scale."
+    },
+    {
+      "id": "E38",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 8,
+      "content": "learnable registers [16] then compress these tokens into a small set of scene tokens."
+    },
+    {
+      "id": "E39",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 8,
+      "content": "The same augmented route is used to evaluate student proposals, keeping the navigation command, teacher trajectory, and proposal scores mutually consistent."
+    },
+    {
+      "id": "E40",
+      "section": "3.2 DriveZero",
+      "page": 10,
+      "content": "We train DriveZero for 25 epochs with a batch size of 256, using AdamW [51]"
+    },
+    {
+      "id": "E41",
+      "section": "3.2.1 Main Results of the End-to-End Student",
+      "page": 12,
+      "content": "57.1: the Stage 1 score decreases by 1.8 points, while the more challenging Stage 2 score improves by 8.3 points."
+    },
+    {
+      "id": "E42",
+      "section": "3.2.1 Main Results of the End-to-End Student",
+      "page": 13,
+      "content": "from GigaPixel [62] by 8.1 points (46.6 vs. 38.5)."
+    },
+    {
+      "id": "E43",
+      "section": "3.1 DriveRL",
+      "page": 9,
+      "content": "We draw 922,703 scenes from the nuPlan trainval split,"
+    },
+    {
+      "id": "E44",
+      "section": "3.2 DriveZero",
+      "page": 10,
+      "content": "we use the navtrain split from NAVSIM [18], which is built on nuPlan [33] and contains 100K interactive real-world scenarios."
+    },
+    {
+      "id": "E45",
+      "section": "3.1 DriveRL",
+      "page": 9,
+      "content": "three nuPlan community splits: Val14 (1,118 scenarios), Test14-hard (272), and Test14-random (261) [2, 8, 17]."
+    },
+    {
+      "id": "E46",
+      "section": "3.2 DriveZero",
+      "page": 11,
+      "content": "NAVSIMv1 navtest [18], built from nuPlan as a subset of OpenScene, and NAVSIMv2 navhard [3] provide pseudo closedloop evaluation"
+    },
+    {
+      "id": "E47",
+      "section": "3.2 DriveZero",
+      "page": 11,
+      "content": "We report route completion and HD-Score over Easy, Medium, Hard, and Extreme scenarios."
+    },
+    {
+      "id": "E48",
+      "section": "2.1.2 Mixed-Agent Simulation",
+      "page": 4,
+      "content": "whose closed-loop evaluation drives background vehicles by IDM and therefore does not reward more natural interaction behavior."
+    },
+    {
+      "id": "E49",
+      "section": "A.5.3 Traffic-Light Input and Reward",
+      "page": 29,
+      "content": "The traffic-light reward lowers the policy-only violation rate from 3.88% to 2.03%, while all six aggregate scores decrease."
+    },
+    {
+      "id": "E50",
+      "section": "References",
+      "page": 21,
+      "content": "Am-radio: Agglomerative vision foundation model – reduce all domains into one."
+    },
+    {
+      "id": "E51",
+      "section": "2.2 DriveVFM: Distilling Multiple Vision Foundation Models into One Driving Backbone",
+      "page": 6,
+      "content": "following the agglomerative distillation of RADIO [60]."
+    },
+    {
+      "id": "E52",
+      "section": "References",
+      "page": 20,
+      "content": "Driving on registers. In CVPR, 2026."
+    },
+    {
+      "id": "E53",
+      "section": "References",
+      "page": 21,
+      "content": "Scaling self-play for end-to-end driving. arXiv preprint arXiv:2606.19641, 2026."
+    },
+    {
+      "id": "E54",
+      "section": "References",
+      "page": 22,
+      "content": "Simscale: Learning to drive via real-world simulation at scale. In CVPR, 2026."
+    },
+    {
+      "id": "E55",
+      "section": "References",
+      "page": 18,
+      "content": "nuPlan: A closed-loop ML-based planning benchmark for autonomous vehicles. In CVPR Workshops, 2021."
+    },
+    {
+      "id": "E56",
+      "section": "References",
+      "page": 19,
+      "content": "Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking. In NeurIPS, 2024."
+    },
+    {
+      "id": "E57",
+      "section": "References",
+      "page": 23,
+      "content": "Hugsim: A real-time, photo-realistic and closed-loop simulator for autonomous driving. arXiv preprint arXiv:2412.01718, 2024."
+    },
+    {
+      "id": "E58",
+      "section": "3.1.1 Closed-Loop Comparison",
+      "page": 9,
+      "content": "It also exceeds CaRL and GigaFlow, the two prior methods trained without human data, on every setting they report."
+    },
+    {
+      "id": "E59",
+      "section": "3.2.1 Main Results of the End-to-End Student",
+      "page": 12,
+      "content": "surpassing both DrivoR-Scale [34], which also uses SimScale data, and PDM-Closed [17], despite the latter using ground-truth symbolic inputs."
+    },
+    {
+      "id": "E60",
+      "section": "2.1.3 Value-Guided Test-Time Action Search",
+      "page": 6,
+      "content": "The teacher is used only during training and is removed at inference time."
+    },
+    {
+      "id": "E61",
+      "section": "2.1.3 Value-Guided Test-Time Action Search",
+      "page": 6,
+      "content": "The privileged DriveRL teacher rolls out a 20-step trajectory from structured scene observations."
+    },
+    {
+      "id": "E62",
+      "section": "3.2 DriveZero",
+      "page": 10,
+      "content": "The planner comprises 64 trajectory proposals, a 256-dimensional planning representation, and a 4-layer proposal decoder."
+    },
+    {
+      "id": "E63",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 7,
+      "content": "The student never enters an interactive environment and no rendering is required."
+    },
+    {
+      "id": "E64",
+      "section": "2.3 DriveZero: Distilling the RL Teacher into a Camera-Only Planner",
+      "page": 7,
+      "content": "DriveZero takes the multi-view images of the current frame, the ego kinematics, and a navigation command as inputs."
+    },
+    {
+      "id": "E65",
+      "section": "2.1.1 The Structured Inputs and Policy Network",
+      "page": 4,
+      "content": "The action head defines independent Beta distributions for normalized jerk and steering-rate commands [10]."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "Am-radio: Agglomerative vision foundation model – reduce all domains into one",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "DriveVFM 明确采用 RADIO 的多教师聚合蒸馏思路。",
+      "source": "paper_reference",
+      "doi": "10.1109/CVPR52733.2024.01187",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E50",
+        "E51"
+      ]
+    },
+    {
+      "title": "Driving on registers",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "DriveZero 按照 DrivoR 使用 register tokens 压缩相机视觉特征，并与 DrivoR-Scale 比较。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E38",
+        "E52",
+        "E59"
+      ]
+    },
+    {
+      "title": "Scaling self-play for end-to-end driving",
+      "paper_id": null,
+      "relation_type": "compares_with",
+      "description": "对应 GigaPixel；论文在 NAVSIMv2 和 HUGSIM 中与其比较。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2606.19641",
+      "url": "",
+      "evidence_ids": [
+        "E42",
+        "E53"
+      ]
+    },
+    {
+      "title": "Simscale: Learning to drive via real-world simulation at scale",
+      "paper_id": null,
+      "relation_type": "uses_dataset",
+      "description": "DriveZero-Scale 使用其 OOD 仿真场景扩展训练数据。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E37",
+        "E54"
+      ]
+    },
+    {
+      "title": "nuPlan: A closed-loop ML-based planning benchmark for autonomous vehicles",
+      "paper_id": null,
+      "relation_type": "uses_benchmark",
+      "description": "DriveRL 使用 nuPlan 日志初始化训练世界，并在三个社区划分上进行闭环评估。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E43",
+        "E45",
+        "E55"
+      ]
+    },
+    {
+      "title": "Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking",
+      "paper_id": "navsim-2024",
+      "relation_type": "uses_benchmark",
+      "description": "DriveZero 使用 NAVSIM navtrain 训练，并在 NAVSIMv1 navtest 上评估。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E44",
+        "E46",
+        "E56"
+      ]
+    },
+    {
+      "title": "Hugsim: A real-time, photo-realistic and closed-loop simulator for autonomous driving",
+      "paper_id": null,
+      "relation_type": "uses_benchmark",
+      "description": "用于相机规划器的真闭环零样本迁移评估。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2412.01718",
+      "url": "",
+      "evidence_ids": [
+        "E28",
+        "E47",
+        "E57"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F3",
+      "caption": "Figure 2 Overview of the end-to-end student policy distillation framework. The privileged DriveRL teacher rolls out a 20-step trajectory from structured scene observations. The camera-only student DriveZero uses DriveVFM features and a command-conditioned Transformer planner to generate multiple 20-step trajectory proposals. Winnertakes-all (WTA) trajectory supervision transfers the teacher behavior, while the proposal-scoring branch is trained against PDM targets. The teacher is used only during training and is removed at inference time.",
+      "description": "图中保留 DriveRL、DriveZero 与 Distillation Losses 三个区域。上方教师支路为 Structured Scene → Teacher Policy → Rollout → Teacher Trajectory；下方学生支路为 Camera Images → DriveVFM → Transformer Planner → Trajectory Proposals，Command 从下方输入规划器。教师轨迹和学生候选分别连至 WTA Loss，学生候选另连至 Score Loss。该图直接展示结构化状态教师如何通过轨迹监督相机学生，是本文统一感知与动作模型的核心流程；图注明确教师仅在训练时使用。",
+      "page": 6,
+      "path": "/paper-assets/drivezero-2026/f3.webp",
+      "type": "method_overview"
+    }
+  ],
+  "tags": [],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T13:22:57+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.2",
+    "source_hash": "82a00048648b155ecad83888b94be95a39c3f6511cb8497eb2fb435feb72797b",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

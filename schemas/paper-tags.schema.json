@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Manually curated Paper Library tags",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "tags", "papers"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "tags": {
+      "type": "array", "maxItems": 500,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^t-[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 60 }
+        }
+      }
+    },
+    "papers": {
+      "type": "object", "maxProperties": 10000,
+      "propertyNames": { "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+      "additionalProperties": {
+        "type": "array", "uniqueItems": true, "maxItems": 50,
+        "items": { "type": "string", "pattern": "^t-[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80 }
+      }
+    }
+  }
+}

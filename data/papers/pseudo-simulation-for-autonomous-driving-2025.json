@@ -1,0 +1,800 @@
+{
+  "schema_version": "1.0",
+  "id": "pseudo-simulation-for-autonomous-driving-2025",
+  "metadata": {
+    "title": "Pseudo-Simulation for Autonomous Driving",
+    "short_title": "",
+    "authors": [
+      "Wei Cao",
+      "Marcel Hallgarten",
+      "Tianyu Li",
+      "Daniel Dauner",
+      "Xunjiang Gu",
+      "Caojun Wang",
+      "Yakov Miron",
+      "Marco Aiello",
+      "Hongyang Li",
+      "Igor Gilitschenski",
+      "Boris Ivanovic",
+      "Marco Pavone",
+      "Andreas Geiger",
+      "Kashyap Chitta"
+    ],
+    "year": 2025,
+    "venue": "9th Conference on Robot Learning (CoRL 2025)",
+    "doi": "",
+    "arxiv_id": "2506.04218",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "",
+    "code_url": "https://github.com/autonomousvision/navsim",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "论文提出 pseudo-simulation：结合真实驾驶观测与通过 3D Gaussian Splatting 提前生成的合成观测，以非交互方式评估规划器。第一阶段评估真实观测下的轨迹，第二阶段评估多个可能未来状态下的轨迹，并根据合成观测起点与第一阶段终点的距离加权。该方法旨在兼顾开放环评估的可扩展性与闭环评估对误差恢复的考察。实验中，与 nuPlan 闭环分数的相关性达到 R²=0.8，高于单阶段基线的 R²=0.7；论文同时发布 NAVSIM v2 公共评测框架。",
+    "one_sentence": "通过预生成未来偏移观测、两阶段轨迹评分和邻近性加权，pseudo-simulation 以可并行的评估方式提高了与闭环驾驶评估的一致性。",
+    "research_problem": "如何在避免逐帧交互式传感器仿真的同时，评估规划器偏离专家轨迹后的行为，并提高离线评估与闭环表现的相关性。",
+    "motivation": "开放环指标通常忽略累积误差，而交互式闭环仿真的计算成本较高；作者希望将真实数据上的可扩展评估与对误差恢复能力的考察结合起来。",
+    "core_idea": "在评估前生成覆盖可能未来状态的合成观测，再根据待测规划器第一阶段到达的终点，为第二阶段各观测的评分分配权重。",
+    "method_summary": "真实观测与合成观测各执行一次四秒轨迹预测及 BEV 仿真评分；第二阶段分数按空间距离进行归一化高斯加权，随后与第一阶段分数相乘。",
+    "evidence_ids": [
+      "e01",
+      "e02",
+      "e03",
+      "e04",
+      "e05",
+      "e18",
+      "e24",
+      "e27"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "c1",
+      "title": "两阶段 pseudo-simulation 评估范式",
+      "description": "将真实初始观测与预生成的合成未来观测结合，使评估能够并行执行，并考察偏移状态下的规划行为。",
+      "evidence_ids": [
+        "e02",
+        "e04",
+        "e05"
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "邻近性加权与跨阶段分数聚合",
+      "description": "依据合成观测起点与第一阶段规划终点的距离确定重要性；采用高斯加权平均汇总第二阶段分数，再通过乘法融合两个阶段。",
+      "evidence_ids": [
+        "e03",
+        "e18",
+        "e19"
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "引入反应式交通和专家违规过滤的评分流程",
+      "description": "BEV 仿真中的背景车辆通过 IDM 响应自车；EPDMS 将规则违规惩罚与子分数加权平均结合，并忽略同场景中人类专家也发生的违规。",
+      "evidence_ids": [
+        "e10",
+        "e12",
+        "e13"
+      ]
+    },
+    {
+      "id": "c4",
+      "title": "NAVSIM v2 与 navhard 标准化评测",
+      "description": "发布基于两阶段评估的公共排行榜，使用具有挑战性的 navhard 场景，并展示不同规划器对合成偏移的敏感性。",
+      "evidence_ids": [
+        "e27",
+        "e29"
+      ]
+    },
+    {
+      "id": "c5",
+      "title": "NavFormer 基线",
+      "description": "提出采用 BEVFormer 编码器处理环视相机输入、采用 Hydra-MDP 解码头进行规划的基线架构。",
+      "evidence_ids": [
+        "e31",
+        "e32"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "真实驾驶日志中的多视角相机图像",
+      "自车速度与运动历史等状态特征",
+      "离散驾驶指令：left、straight 或 right",
+      "用于预生成第二阶段观测的专家轨迹与场景数据"
+    ],
+    "outputs": [
+      "规划器输出的自车局部坐标系四秒未来航点轨迹",
+      "第一阶段及各合成观测的 EPDMS",
+      "第二阶段加权分数与两阶段综合分数"
+    ],
+    "components": [
+      {
+        "name": "Stage 1：真实观测轨迹评估",
+        "description": "规划器根据真实观测预测四秒轨迹；使用运动学自行车模型与 LQR 控制器以 10Hz 执行，整个阶段不向规划器提供闭环反馈。",
+        "evidence_ids": [
+          "e06",
+          "e09",
+          "e11"
+        ]
+      },
+      {
+        "name": "背景交通响应",
+        "description": "背景车辆采用 Intelligent Driver Model（IDM）响应自车。",
+        "evidence_ids": [
+          "e10"
+        ]
+      },
+      {
+        "name": "EPDMS 与专家违规过滤",
+        "description": "综合规则违规的乘法惩罚与子分数加权平均；如果人类专家在同一场景也发生相应违规，则忽略该惩罚。",
+        "evidence_ids": [
+          "e12",
+          "e13"
+        ]
+      },
+      {
+        "name": "未来起点与历史生成",
+        "description": "围绕专家四秒后的终点采样，而非依赖待测规划器的输出。横向每隔 0.5 米采样至两侧各 2.0 米，纵向间隔为 5.0 米；通过匹配人类驾驶轨迹生成朝向与运动历史。",
+        "evidence_ids": [
+          "e14",
+          "e15",
+          "e16"
+        ]
+      },
+      {
+        "name": "场景重建与预渲染",
+        "description": "采用修改后的 MTGS，仅使用单次驾驶遍历重建场景；通过 LiDAR 配准、束调整和相机位姿优化改善重建，再提前生成合成观测。",
+        "evidence_ids": [
+          "e05",
+          "e17",
+          "e20"
+        ]
+      },
+      {
+        "name": "Stage 2 与分数聚合",
+        "description": "对预生成合成观测重复轨迹预测和评分。依据各合成起点与第一阶段终点的距离进行高斯加权，默认核方差 σ²=0.1；综合分数为第一阶段分数与第二阶段加权分数的乘积。",
+        "evidence_ids": [
+          "e03",
+          "e18",
+          "e19",
+          "e21"
+        ]
+      }
+    ],
+    "pipeline": [
+      "根据专家轨迹确定未来采样起点，并生成匹配的朝向和运动历史。",
+      "重建驾驶场景并提前渲染第二阶段合成观测。",
+      "在真实初始观测上预测并执行四秒轨迹，取得第一阶段分数和终点。",
+      "在各合成观测上独立预测并评分。",
+      "根据合成起点与第一阶段终点的距离，对第二阶段分数归一化高斯加权。",
+      "将第一阶段分数与第二阶段加权分数相乘，得到综合评分。"
+    ],
+    "details": "两个阶段均预测四秒轨迹，整体用于近似八秒闭环评估。传感器观测在评估前生成；阶段内轨迹执行使用 BEV 仿真，规划器不逐帧接收新观测。合成起点采样独立于待测规划器，规划器相关的信息通过评分权重进入聚合过程。",
+    "evidence_ids": [
+      "e03",
+      "e05",
+      "e06",
+      "e07",
+      "e08",
+      "e09",
+      "e10",
+      "e11",
+      "e12",
+      "e13",
+      "e14",
+      "e15",
+      "e16",
+      "e17",
+      "e18",
+      "e19",
+      "e20",
+      "e21",
+      "e25"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "nuPlan 筛选子集：244 个第一阶段观测、4164 个第二阶段合成观测",
+      "navhard：450 个第一阶段观测、5462 个第二阶段观测",
+      "navhard 中用于新视角合成评估的 8 个场景"
+    ],
+    "benchmarks": [
+      "nuPlan closed-loop evaluation",
+      "NAVSIM v2 navhard leaderboard",
+      "合成观测下的 LTF 感知与规划评估",
+      "Novel View Synthesis（NVS）消融评估"
+    ],
+    "metrics": [
+      "Extended Predictive Driver Model Score（EPDMS）",
+      "nuPlan closed-loop score（CLS）",
+      "nuPlan open-loop score（OLS）",
+      "Average Displacement Error（ADE）",
+      "Pearson 线性相关系数 r",
+      "Spearman 秩相关系数 ρ",
+      "决定系数 R²",
+      "BEV 感知 mIoU",
+      "LPIPS",
+      "每场景规划器推理次数"
+    ],
+    "baselines": [
+      "单阶段四秒与八秒评估",
+      "Constant kinematics",
+      "Intelligent Driver Model（IDM）",
+      "PDM-Closed（PDM-C）",
+      "PlanCNN",
+      "Urban Driver",
+      "Constant Velocity（CV）",
+      "Ego-history MLP",
+      "Latent TransFuser（LTF）",
+      "NavFormer",
+      "LTFv6",
+      "RAP",
+      "ZTRS",
+      "GuideFlow",
+      "SimScale",
+      "DrivoR",
+      "Street Gaussians",
+      "不使用位姿优化的重建变体"
+    ],
+    "main_results": [
+      {
+        "text": "在论文报告的 83 个规划器上，两阶段评估与 nuPlan 闭环分数的 Pearson 相关系数达到 r=0.89、R²=0.8；单阶段基线为 r=0.83、R²=0.7。该相关性实验使用去除 TLC、LK 和 EC 的简化 EPDMS。",
+        "evidence_ids": [
+          "e22",
+          "e23",
+          "e24"
+        ]
+      },
+      {
+        "text": "完整合成观测密度下，每场景需要 13 次规划器推理，而八秒、10Hz 的 nuPlan 闭环评估需要 80 次，约为前者的六倍；这比较的是推理次数。",
+        "evidence_ids": [
+          "e25",
+          "e26"
+        ]
+      },
+      {
+        "text": "将第二阶段观测密度降至 25%，即每场景约三个合成观测时，与闭环分数的相关系数仍高于 0.85。",
+        "evidence_ids": [
+          "e28"
+        ]
+      },
+      {
+        "text": "navhard 排行榜中，PDM-Closed 的 EPDMS 最高，为 56.6。作者观察到各方法从第一阶段到第二阶段的子分数总体下降，并指出 PDM-Closed 在 HC、EC 舒适性指标上的不足。",
+        "evidence_ids": [
+          "e29",
+          "e30",
+          "e33"
+        ]
+      },
+      {
+        "text": "Table 3a 中，LTF 在真实第一阶段观测上的 mIoU/EPDMS 为 46.0/62.3，在合成第一阶段观测上为 37.6/61.0，在扰动后的合成第二阶段观测上为 36.9/44.2。",
+        "evidence_ids": [
+          "e34",
+          "e35",
+          "e36"
+        ]
+      },
+      {
+        "text": "新视角合成消融中，Street Gaussians 的 LPIPS 为 0.354，不使用位姿优化的变体为 0.322，完整方法为 0.253；评估使用 8 个场景及 10Hz 交替的训练、测试视角。",
+        "evidence_ids": [
+          "e37",
+          "e38",
+          "e39"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "e22",
+      "e23",
+      "e24",
+      "e25",
+      "e26",
+      "e27",
+      "e28",
+      "e29",
+      "e30",
+      "e33",
+      "e34",
+      "e35",
+      "e36",
+      "e37",
+      "e38",
+      "e39",
+      "e40",
+      "e41",
+      "e42",
+      "e43"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "当前验证仅考察与仿真基准的相关性，尚未证明或声称能够直接预测真实车辆部署表现。",
+      "evidence_ids": [
+        "e44"
+      ]
+    },
+    {
+      "text": "合成视图依赖逐场景优化，在当前硬件上每场景约需 1–2 小时，限制了超大规模数据集上的扩展。",
+      "evidence_ids": [
+        "e45",
+        "e46"
+      ]
+    },
+    {
+      "text": "合成视图仍可能存在视觉伪影；当前评估主要依赖算法指标。",
+      "evidence_ids": [
+        "e47"
+      ]
+    },
+    {
+      "text": "背景交通采用较简单的规则模型，第二阶段中的背景车辆严格沿道路中心线行驶。",
+      "evidence_ids": [
+        "e48"
+      ]
+    },
+    {
+      "text": "忽略人类专家也发生的违规虽然减少误报，但可能遗漏重要失败与边缘情况，因为人类驾驶并非始终安全。",
+      "evidence_ids": [
+        "e49"
+      ]
+    },
+    {
+      "text": "高斯加权主要依据经验表现选择，聚合和加权仍缺少更原则性的形式化设计。",
+      "evidence_ids": [
+        "e50"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：核心价值在于用一组可重复使用的合成未来观测，近似检验规划器对自身偏移的恢复能力。现有证据支持其在所测 nuPlan 设置中的评估相关性，但不足以推断真实道路表现。合成第一阶段与合成第二阶段的对照支持分布偏移影响规划的解释，不过渲染与行为因素的完全分离仍需谨慎。文内还存在报告一致性问题：规划器分组数量与总数不一致，渲染实验正文的阶段称谓与 Table 3a 不一致；本记录保留报告总数，并按表格呈现渲染结果。",
+    "open_questions": [
+      "相关性结论能否推广到不同交通分布、规划器类别和更长评估时域？",
+      "有限的合成起点覆盖是否会遗漏规划器实际到达的状态，以及如何量化这种遗漏？",
+      "逐场景预处理成本计入后，重复评估多少规划器才能体现总体效率优势？",
+      "如何区分渲染伪影、输入分布偏移与背景交通模型对最终评分的影响？",
+      "如何校准专家违规过滤，以兼顾误报减少与安全失败检出？",
+      "能否澄清规划器数量以及 Table 3a 对应阶段的报告差异？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "e01",
+      "section": "Abstract",
+      "page": 1,
+      "content": "Open-loop evaluation, while being ef-\nficient and data-driven, relies on metrics that generally overlook compounding er-\nrors."
+    },
+    {
+      "id": "e02",
+      "section": "1 Introduction",
+      "page": 2,
+      "content": "Stage 1 uses the originally recorded real-world ob-\nservations. Stage 2 uses synthetic observations generated based on these original frames."
+    },
+    {
+      "id": "e03",
+      "section": "1 Introduction",
+      "page": 2,
+      "content": "we weight the importance of each\nsynthetic observation based on its proximity to the endpoint of the trajectory that the AV initially\npredicted"
+    },
+    {
+      "id": "e04",
+      "section": "1 Introduction",
+      "page": 3,
+      "content": "In summary, pseudo-simulation combines\nreal and pre-rendered synthetic data,\nenabling scalable, parallel evaluation."
+    },
+    {
+      "id": "e05",
+      "section": "1 Introduction",
+      "page": 2,
+      "content": "these synthetic observations are generated before the evaluation process begins, enabling evaluation\nin a non-interactive manner."
+    },
+    {
+      "id": "e06",
+      "section": "3 Pseudo-Simulation",
+      "page": 3,
+      "content": "In both stages, an\nAV (also called planner/ego agent) generates a 4-second trajectory based on sensor inputs and a\ndriving command [8]."
+    },
+    {
+      "id": "e07",
+      "section": "3 Pseudo-Simulation",
+      "page": 3,
+      "content": "The inputs include multi-view camera images and ego status features such as\nthe velocity and motion history."
+    },
+    {
+      "id": "e08",
+      "section": "3 Pseudo-Simulation",
+      "page": 3,
+      "content": "The ego\nagent outputs a trajectory (i.e., a sequence of desired future waypoints) in its local coordinate frame."
+    },
+    {
+      "id": "e09",
+      "section": "3.1 Stage 1: Initial Observations",
+      "page": 4,
+      "content": "The 4-second trajectory predicted by the agent is executed using a kinematic\nbicycle model [41] and an LQR controller [42] at 10Hz."
+    },
+    {
+      "id": "e10",
+      "section": "3.1 Stage 1: Initial Observations",
+      "page": 4,
+      "content": "Background vehicles (represented as oriented bounding boxes)\nrespond to the ego agent using a rule-based planner called the Intelligent Driver Model (IDM) [43]."
+    },
+    {
+      "id": "e11",
+      "section": "3.1 Stage 1: Initial Observations",
+      "page": 4,
+      "content": "The trajectory is committed for the entire\nsimulation horizon, and no closed-loop feedback is provided to the agent during this time."
+    },
+    {
+      "id": "e12",
+      "section": "3.1 Stage 1: Initial Observations",
+      "page": 4,
+      "content": "If a rule violation is also com-\nmitted by the human expert driver in the same\nscene, the penalty is ignored."
+    },
+    {
+      "id": "e13",
+      "section": "3.1 Stage 1: Initial Observations",
+      "page": 4,
+      "content": "It combines multi-\nplicative penalties for rule violations with a weighted average of several subscores:"
+    },
+    {
+      "id": "e14",
+      "section": "3.2 Stage 2: Synthetic Observations",
+      "page": 4,
+      "content": "this sampling does not depend on the Stage 1 endpoint produced by a planner"
+    },
+    {
+      "id": "e15",
+      "section": "3.2 Stage 2: Synthetic Observations",
+      "page": 5,
+      "content": "laterally, viewpoints are sampled every 0.5 meters up\nto 2.0 meters on each side; longitudinally, viewpoints are sampled every 5.0 meters."
+    },
+    {
+      "id": "e16",
+      "section": "3.2 Stage 2: Synthetic Observations",
+      "page": 5,
+      "content": "we generate a plausible heading\nand motion history by matching it to the nearest trajectory in a human driving dataset."
+    },
+    {
+      "id": "e17",
+      "section": "3.2 Stage 2: Synthetic Observations",
+      "page": 5,
+      "content": "However, unlike MTGS, which uses multiple nearby driving traversals for jointly\noptimizing a 3D scene representation, we use only a single traversal."
+    },
+    {
+      "id": "e18",
+      "section": "3.2 Stage 2: Synthetic Observations",
+      "page": 6,
+      "content": "Based on our findings, we instantiate A1 as a simple product, and A2 as a\nGaussian-weighted average with kernel variance σ2:"
+    },
+    {
+      "id": "e19",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 7,
+      "content": "σ2 = 0.05 and our default configuration\nof σ2 = 0.1 give the highest correlations."
+    },
+    {
+      "id": "e20",
+      "section": "3.2 Stage 2: Synthetic Observations",
+      "page": 5,
+      "content": "we calculate accurate initial camera pose estimates via LiDAR registration [46]\nand bundle adjustment [47], followed by camera pose optimization"
+    },
+    {
+      "id": "e21",
+      "section": "3.2 Stage 2: Synthetic Observations",
+      "page": 4,
+      "content": "In Stage 2, the agent’s behavior is inferred on pre-generated synthetic observations. The scoring\npipeline from Stage 1 is repeated"
+    },
+    {
+      "id": "e22",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 6,
+      "content": "We include a total of 83\nplanners, comprising both rule-based and learned models"
+    },
+    {
+      "id": "e23",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 6,
+      "content": "For these experiments, we use a reduced version of EPDMS, excluding the\nTLC, LK, and EC metrics"
+    },
+    {
+      "id": "e24",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 6,
+      "content": "reaching a\nPearson correlation of r = 0.89 (corresponding to R2 = 0.8), compared to r = 0.83 (R2 = 0.7)"
+    },
+    {
+      "id": "e25",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 6,
+      "content": "comparing the 8-second closed-loop scores from the nuPlan\nsimulator against the results of our 2×4 second pseudo-simulation"
+    },
+    {
+      "id": "e26",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 7,
+      "content": "resulting in 13 planner inferences per scenario. In comparison, closed-\nloop simulation in nuPlan requires 80 planner inferences per scenario"
+    },
+    {
+      "id": "e27",
+      "section": "4.2 What new challenges and insights does our leaderboard provide?",
+      "page": 7,
+      "content": "It uses a subset of nuPlan that we refer to as navhard,\ninvolving 450 Stage 1 and 5462 Stage 2 observations."
+    },
+    {
+      "id": "e28",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 7,
+      "content": "approximately three Stage 2 observations per scene, the correlation remains above 0.85."
+    },
+    {
+      "id": "e29",
+      "section": "4.2 What new challenges and insights does our leaderboard provide?",
+      "page": 8,
+      "content": "we observe a general drop in subscores from\nStage 1 to Stage 2 for all methods"
+    },
+    {
+      "id": "e30",
+      "section": "4.2 What new challenges and insights does our leaderboard provide?",
+      "page": 8,
+      "content": "PDM-\nClosed achieves the highest EPDMS of 56.6, closely followed by recent scalable architectures like\nDrivoR [56]."
+    },
+    {
+      "id": "e31",
+      "section": "4.2 What new challenges and insights does our leaderboard provide?",
+      "page": 8,
+      "content": "This model employs a BEVFormer encoder [57] to pro-\ncess surround-view camera inputs"
+    },
+    {
+      "id": "e32",
+      "section": "4.2 What new challenges and insights does our leaderboard provide?",
+      "page": 8,
+      "content": "Finally, NavFormer uses a Hydra-MDP decoder head for planning [58]."
+    },
+    {
+      "id": "e33",
+      "section": "4.2 What new challenges and insights does our leaderboard provide?",
+      "page": 8,
+      "content": "it exhibits lower performance in\ncomfort metrics such as HC and EC."
+    },
+    {
+      "id": "e34",
+      "section": "4.3 Does the proposed neural rendering yield sufficient visual fidelity? / Table 3a",
+      "page": 9,
+      "content": "Real\nS1\n46.0\n62.3\nSyn.\nS1\n37.6\n61.0"
+    },
+    {
+      "id": "e35",
+      "section": "4.3 Does the proposed neural rendering yield sufficient visual fidelity? / Table 3a",
+      "page": 9,
+      "content": "Syn.\nS2\n36.9\n44.2"
+    },
+    {
+      "id": "e36",
+      "section": "4.3 Does the proposed neural rendering yield sufficient visual fidelity? / Table 3 caption",
+      "page": 9,
+      "content": "measuring BEV perception (mIoU) and planning (EPDMS) quality."
+    },
+    {
+      "id": "e37",
+      "section": "4.3 Does the proposed neural rendering yield sufficient visual fidelity? / Table 3b",
+      "page": 9,
+      "content": "Street Gaussians [61]\n0.354\nOurs (w/o pose opt.)\n0.322"
+    },
+    {
+      "id": "e38",
+      "section": "4.3 Does the proposed neural rendering yield sufficient visual fidelity?",
+      "page": 9,
+      "content": "our full method incorporating LiDAR registration, bundle ad-\njustment, and pose optimization achieves the best LPIPS of 0.253."
+    },
+    {
+      "id": "e39",
+      "section": "4.3 Does the proposed neural rendering yield sufficient visual fidelity? / Table 3 caption",
+      "page": 9,
+      "content": "using LPIPS on 8 scenes with 10Hz-alternating training and test views."
+    },
+    {
+      "id": "e40",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 6,
+      "content": "This\nsubset includes 244 initial observations (Stage 1) and 4164 synthetic observations (Stage 2)."
+    },
+    {
+      "id": "e41",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 6,
+      "content": "using Pearson’s\nlinear (r) and Spearman’s rank (ρ) correlation coefficients, as well as the coefficient of determina-\ntion (R2)."
+    },
+    {
+      "id": "e42",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 6,
+      "content": "For learned approaches, we evaluate 22 PlanCNN [49]\nmodels with varying input modalities and 24 Urban Driver [50] models"
+    },
+    {
+      "id": "e43",
+      "section": "4.2 What new challenges and insights does our leaderboard provide?",
+      "page": 8,
+      "content": "six\ncommunity-contributed submissions: LTFv6 [51], RAP [52], ZTRS [53], GuideFlow [54], Sim-\nScale [55], and DrivoR [56]."
+    },
+    {
+      "id": "e44",
+      "section": "Limitations and Future Work",
+      "page": 10,
+      "content": "We do not yet demonstrate or claim direct cor-\nrelation with performance metrics from real-world vehicle deployment."
+    },
+    {
+      "id": "e45",
+      "section": "Limitations and Future Work",
+      "page": 10,
+      "content": "requiring approximately 1-2 hours per\nscene on current hardware."
+    },
+    {
+      "id": "e46",
+      "section": "Limitations and Future Work",
+      "page": 10,
+      "content": "this com-\nputational cost limits scalability for extremely large datasets."
+    },
+    {
+      "id": "e47",
+      "section": "Limitations and Future Work",
+      "page": 10,
+      "content": "some visual artifacts may\npersist in the generated synthetic views. Our evaluation primarily focuses on algorithmic metrics."
+    },
+    {
+      "id": "e48",
+      "section": "Limitations and Future Work",
+      "page": 10,
+      "content": "This results in these agents\nstrictly following road-centerline paths during Stage 2 evaluation."
+    },
+    {
+      "id": "e49",
+      "section": "Limitations and Future Work",
+      "page": 10,
+      "content": "it could also risk overlooking important failure and\nedge cases, since human driving is not always a gold standard for safety."
+    },
+    {
+      "id": "e50",
+      "section": "Limitations and Future Work",
+      "page": 10,
+      "content": "Our Gaussian weighting is selected for its strong empirical performance with\nminimal assumptions."
+    },
+    {
+      "id": "e51",
+      "section": "References",
+      "page": 11,
+      "content": "Navsim: Data-driven non-reactive au-\ntonomous vehicle simulation and benchmarking."
+    },
+    {
+      "id": "e52",
+      "section": "2 Related Work",
+      "page": 3,
+      "content": "The closest\nwork to ours, NAVSIM v1 [8], offers a more structured framework for open-loop benchmarking."
+    },
+    {
+      "id": "e53",
+      "section": "References",
+      "page": 11,
+      "content": "MTGS: Multi-traversal"
+    },
+    {
+      "id": "e54",
+      "section": "References",
+      "page": 11,
+      "content": "gaussian splatting. arXiv.org, 2503.12552, 2025."
+    },
+    {
+      "id": "e55",
+      "section": "References",
+      "page": 11,
+      "content": "Towards learning-based\nplanning: The nuPlan benchmark for real-world autonomous driving."
+    },
+    {
+      "id": "e56",
+      "section": "4.1 How well-aligned is pseudo-simulation with closed-loop evaluation?",
+      "page": 6,
+      "content": "we con-\nduct a correlation analysis with the nuPlan simulator [4]."
+    },
+    {
+      "id": "e57",
+      "section": "References",
+      "page": 14,
+      "content": "Gaussians: Modeling dynamic urban scenes with gaussian splatting."
+    },
+    {
+      "id": "e58",
+      "section": "3.2 Stage 2: Synthetic Observations",
+      "page": 5,
+      "content": "Specifically, we use a modified version of\nMulti-Traversal Gaussian Splatting (MTGS) [9]."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking.",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "论文将 NAVSIM v1 列为最接近的工作，并在其评估框架基础上引入两阶段合成观测评估。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "e51",
+        "e52",
+        "e02"
+      ]
+    },
+    {
+      "title": "MTGS: Multi-traversal gaussian splatting.",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "使用修改后的 MTGS 进行驾驶场景重建，将多次遍历重建改为单次遍历，并改善相机位姿估计。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2503.12552",
+      "url": "",
+      "evidence_ids": [
+        "e53",
+        "e54",
+        "e58",
+        "e17",
+        "e20"
+      ]
+    },
+    {
+      "title": "Towards learning-based planning: The nuPlan benchmark for real-world autonomous driving.",
+      "paper_id": null,
+      "relation_type": "uses_benchmark",
+      "description": "使用 nuPlan 仿真器开展闭环分数相关性分析，并从其数据中构建评估子集。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "e55",
+        "e56",
+        "e40",
+        "e27"
+      ]
+    },
+    {
+      "title": "Street Gaussians: Modeling dynamic urban scenes with gaussian splatting.",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "作为新视角合成质量评估中的基线，使用 LPIPS 与本文重建方法比较。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "e57",
+        "e37",
+        "e39"
+      ]
+    }
+  ],
+  "figures": [],
+  "tags": [
+    "3D Gaussian Splatting",
+    "NAVSIM v2",
+    "Pseudo-Simulation",
+    "navhard",
+    "分布偏移",
+    "自动驾驶",
+    "规划评估",
+    "闭环相关性"
+  ],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T10:25:49+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.0",
+    "source_hash": "a8431697ffa276068375c937cc2f90a2c8059a17b285fba0f0c8ba41eb877e81",
+    "parser_version": "pymupdf-blocks-1.0"
+  }
+}

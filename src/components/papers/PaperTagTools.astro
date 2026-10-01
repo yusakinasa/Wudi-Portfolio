@@ -1,0 +1,32 @@
+---
+import { paperTagSnapshot } from '../../lib/papers';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const snapshot = JSON.stringify(paperTagSnapshot()).replace(/</g, '\\u003c');
+---
+{import.meta.env.DEV && <><aside class="paper-tag-tools" data-paper-tag-tools data-base={base}>
+  <div class="paper-tag-actions">
+    <a class="text-link" href={`${base}/papers/tags/`}>标签管理 →</a>
+  </div>
+  <p class="paper-provenance">标签由你手工维护。本机保存直接写入项目文件，刷新和重启后仍然保留。</p>
+  <p class="paper-tag-status" role="status" aria-live="polite" data-tags-status></p>
+  <script is:inline type="application/json" data-tag-snapshot set:html={snapshot} />
+</aside>
+<dialog class="paper-tag-dialog" data-paper-tag-dialog aria-labelledby="paper-tag-dialog-title">
+  <h2 id="paper-tag-dialog-title">设置论文标签</h2>
+  <p data-tag-paper-title></p>
+  <p class="paper-provenance">可选择多个标签；标签名称和分类均由你决定。</p>
+  <form data-tag-selection>
+    <fieldset><legend>选择标签</legend><div class="paper-tag-choices" data-tag-choices></div></fieldset>
+    <div class="paper-tag-actions"><button class="paper-tag-button" type="submit">保存标签</button><button class="paper-tag-button" type="button" data-tag-cancel>取消</button></div>
+  </form>
+  <form class="paper-tag-create" data-tag-create>
+    <label>新增标签<input name="name" required maxlength="60" autocomplete="off" placeholder="例如：自动驾驶" /></label>
+    <button class="paper-tag-button" type="submit">创建标签</button>
+  </form>
+  <p class="paper-tag-status" role="status" data-tag-dialog-status></p>
+  <a class="text-link" href={`${base}/papers/tags/`}>管理全部标签 →</a>
+</dialog></>}
+<script>
+  import { setupPaperTags } from '../../lib/paper-tags-browser';
+  if (import.meta.env.DEV) setupPaperTags();
+</script>

@@ -1,0 +1,37 @@
+---
+import { assetUrl, type Paper } from '../../lib/papers';
+interface Props { figures: Paper['figures'] }
+const { figures } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const labels: Record<string, string> = { concept_overview: '概念总览', architecture: '模型架构', method_overview: '方法流程' };
+---
+{figures.map(figure => <figure class="paper-figure" id={`figure-${figure.id}`}>
+  <p class="paper-figure-label">{labels[figure.type] || figure.type}{figure.page && ` · PDF p. ${figure.page}`}</p>
+  <a href={assetUrl(figure.path, base)!} data-figure-open data-caption={figure.caption} data-description={figure.description} aria-label={`放大查看：${figure.caption}`}><img src={assetUrl(figure.path, base)!} alt={figure.description || figure.caption} loading="lazy" decoding="async" /></a>
+  <figcaption><span class="paper-original-caption">{figure.caption}</span><span class="paper-figure-explanation">{figure.description}</span></figcaption>
+</figure>)}
+{figures.length > 0 && <dialog class="paper-image-dialog" data-paper-image-dialog aria-label="论文图放大预览">
+  <form method="dialog"><button class="paper-image-close" aria-label="关闭图片预览">关闭 ×</button></form>
+  <img data-dialog-image alt="" />
+  <p data-dialog-caption></p>
+</dialog>}
+<script>
+  const dialog = document.querySelector<HTMLDialogElement>('[data-paper-image-dialog]');
+  const image = dialog?.querySelector<HTMLImageElement>('[data-dialog-image]');
+  const caption = dialog?.querySelector<HTMLElement>('[data-dialog-caption]');
+  document.querySelectorAll<HTMLAnchorElement>('[data-figure-open]').forEach(link => {
+    link.addEventListener('click', event => {
+      if (!dialog || !image || !caption || typeof dialog.showModal !== 'function' || event.ctrlKey || event.metaKey) return;
+      event.preventDefault();
+      image.src = link.href;
+      image.alt = link.dataset.description || link.dataset.caption || '';
+      caption.textContent = link.dataset.caption || '';
+      dialog.showModal();
+    });
+  });
+  dialog?.addEventListener('click', event => {
+    if (event.target !== dialog) return;
+    const bounds = dialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+  });
+</script>

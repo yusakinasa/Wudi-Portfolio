@@ -4,16 +4,22 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "finances:sync": "python3 scripts/import_finances.py",
+    "predev": "npm run finances:sync",
     "dev": "astro dev",
+    "prebuild": "npm run finances:sync",
     "build": "astro build",
     "preview": "astro preview",
+    "precheck": "npm run finances:sync",
     "check": "astro check"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
     "astro": "^5.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.0",
+    "@types/node": "^22.20.4",
     "typescript": "^5.6.0"
   }
 }

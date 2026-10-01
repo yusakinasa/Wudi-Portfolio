@@ -1,0 +1,155 @@
+{
+  "schema_version": "1.0",
+  "id": "fixture-2026",
+  "metadata": {
+    "title": "Fixture Study: A Synthetic Paper for Pipeline Testing",
+    "short_title": "Fixture",
+    "authors": [
+      "Example Author"
+    ],
+    "year": 2026,
+    "venue": "Synthetic test fixture — not a publication",
+    "doi": "",
+    "arxiv_id": "",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "",
+    "code_url": "",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "A synthetic document tests a page-aware paper ingestion pipeline.",
+    "one_sentence": "明确标注的合成测试文档，用于检验论文解析和证据追溯。",
+    "research_problem": "验证论文解析与结构化输出。",
+    "motivation": "检验独立分析任务的工作流。",
+    "core_idea": "先解析，再生成可验证的 JSON。",
+    "method_summary": "读取测试文本并引用页面证据。",
+    "evidence_ids": [
+      "E1"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "Page-aware ingestion fixture",
+      "description": "合成测试文档用于检验工作流，不代表真实研究贡献。",
+      "evidence_ids": [
+        "E1"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "Synthetic PDF"
+    ],
+    "outputs": [
+      "Structured JSON"
+    ],
+    "components": [
+      {
+        "name": "Parser",
+        "description": "Reads PDF text blocks.",
+        "evidence_ids": [
+          "E2"
+        ]
+      }
+    ],
+    "pipeline": [
+      "Parse PDF",
+      "Analyze independently",
+      "Validate JSON"
+    ],
+    "details": null,
+    "evidence_ids": [
+      "E2"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "Synthetic fixture"
+    ],
+    "benchmarks": [],
+    "metrics": [],
+    "baselines": [],
+    "main_results": [],
+    "evidence_ids": [
+      "E3"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "This fixture is not a scientific publication.",
+      "evidence_ids": [
+        "E4"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "这是测试用阅读说明，不能作为科研结论。",
+    "open_questions": []
+  },
+  "evidence": [
+    {
+      "id": "E1",
+      "section": "Abstract",
+      "page": 1,
+      "content": "This synthetic document tests a page-aware paper ingestion pipeline."
+    },
+    {
+      "id": "E2",
+      "section": "Method",
+      "page": 1,
+      "content": "The parser reads PDF text blocks and generates structured JSON."
+    },
+    {
+      "id": "E3",
+      "section": "Experiments",
+      "page": 1,
+      "content": "The only dataset is a synthetic fixture."
+    },
+    {
+      "id": "E4",
+      "section": "Limitations",
+      "page": 1,
+      "content": "This fixture is not a scientific publication."
+    },
+    {
+      "id": "E5",
+      "section": "References",
+      "page": 1,
+      "content": "[1] Companion Fixture Study. Example Author. 2025."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "Companion Fixture Study",
+      "paper_id": null,
+      "relation_type": "cites",
+      "description": "测试用参考文献。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E5"
+      ]
+    }
+  ],
+  "figures": [],
+  "tags": [
+    "fixture",
+    "testing"
+  ],
+  "analysis_meta": {
+    "analyzer": "fixture",
+    "analyzed_at": "2026-10-01T00:00:00+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.0",
+    "source_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "parser_version": "pymupdf-blocks-1.0"
+  }
+}

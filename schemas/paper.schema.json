@@ -1,0 +1,572 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Paper Library record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "short_title": {
+          "type": "string"
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "year": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1900,
+          "maximum": 2200
+        },
+        "venue": {
+          "type": "string"
+        },
+        "doi": {
+          "type": "string"
+        },
+        "arxiv_id": {
+          "type": "string"
+        },
+        "paper_url": {
+          "type": "string"
+        },
+        "pdf_url": {
+          "type": "string"
+        },
+        "project_url": {
+          "type": "string"
+        },
+        "code_url": {
+          "type": "string"
+        },
+        "zotero": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "item_key": {
+              "type": "string"
+            },
+            "library_id": {
+              "type": "string"
+            },
+            "collections": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "item_key",
+            "library_id",
+            "collections"
+          ]
+        }
+      },
+      "required": [
+        "title",
+        "short_title",
+        "authors",
+        "year",
+        "venue",
+        "doi",
+        "arxiv_id",
+        "paper_url",
+        "pdf_url",
+        "project_url",
+        "code_url",
+        "zotero"
+      ]
+    },
+    "overview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "abstract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "one_sentence": {
+          "type": "string"
+        },
+        "research_problem": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "motivation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "core_idea": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "method_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "abstract",
+        "one_sentence",
+        "research_problem",
+        "motivation",
+        "core_idea",
+        "method_summary",
+        "evidence_ids"
+      ]
+    },
+    "contributions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "evidence_ids"
+        ]
+      }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "evidence_ids"
+            ]
+          }
+        },
+        "pipeline": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "details": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "inputs",
+        "outputs",
+        "components",
+        "pipeline",
+        "details",
+        "evidence_ids"
+      ]
+    },
+    "experiments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "datasets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "benchmarks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "baselines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "main_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "text",
+              "evidence_ids"
+            ]
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "datasets",
+        "benchmarks",
+        "metrics",
+        "baselines",
+        "main_results",
+        "evidence_ids"
+      ]
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "text",
+          "evidence_ids"
+        ]
+      }
+    },
+    "interpretation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "open_questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "open_questions"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string"
+          },
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "section",
+          "page",
+          "content"
+        ]
+      }
+    },
+    "related_papers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "paper_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "relation_type": {
+            "type": "string",
+            "enum": [
+              "extends",
+              "extended_by",
+              "baseline",
+              "compares_with",
+              "uses_dataset",
+              "uses_benchmark",
+              "builds_on",
+              "method_related",
+              "cites",
+              "follow_up",
+              "related"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "paper_reference",
+              "body_citation",
+              "external_metadata"
+            ]
+          },
+          "doi": {
+            "type": "string"
+          },
+          "arxiv_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "paper_id",
+          "relation_type",
+          "description",
+          "source",
+          "doi",
+          "arxiv_id",
+          "url",
+          "evidence_ids"
+        ]
+      }
+    },
+    "figures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "path": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "concept_overview",
+              "architecture",
+              "method_overview",
+              "result",
+              "benchmark"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "caption",
+          "description",
+          "page",
+          "path",
+          "type"
+        ]
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "analysis_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "analyzer": {
+          "type": "string"
+        },
+        "analyzed_at": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string",
+          "const": "1.0"
+        },
+        "prompt_version": {
+          "type": "string"
+        },
+        "source_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "parser_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "analyzer",
+        "analyzed_at",
+        "schema_version",
+        "prompt_version",
+        "source_hash",
+        "parser_version"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "metadata",
+    "overview",
+    "contributions",
+    "method",
+    "experiments",
+    "limitations",
+    "interpretation",
+    "evidence",
+    "related_papers",
+    "figures",
+    "tags",
+    "analysis_meta"
+  ]
+}

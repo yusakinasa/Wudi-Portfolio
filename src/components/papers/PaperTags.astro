@@ -1,0 +1,12 @@
+---
+import { manualTagNames } from '../../lib/paper-tags';
+import { paperTagSnapshot } from '../../lib/papers';
+interface Props { id: string; title: string }
+const { id, title } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const tags = manualTagNames(paperTagSnapshot().config, id);
+---
+<div class="paper-tag-assignment" data-paper-tag-assignment data-paper-id={id} data-paper-title={title}>
+  <ul class="tag-list" data-manual-tag-list>{tags.map(tag => <li><a href={`${base}/papers/?tag=${encodeURIComponent(tag)}`}>{tag}</a></li>)}</ul>
+  {import.meta.env.DEV ? <button type="button" class="paper-tag-button" data-edit-paper={id}>{tags.length ? '设置标签' : '尚未设置标签，请开始设置'}</button> : !tags.length && <p class="paper-provenance">尚未设置标签</p>}
+</div>

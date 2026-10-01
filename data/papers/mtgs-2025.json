@@ -1,0 +1,713 @@
+{
+  "schema_version": "1.0",
+  "id": "mtgs-2025",
+  "metadata": {
+    "title": "MTGS: Multi-Traversal Gaussian Splatting",
+    "short_title": "MTGS",
+    "authors": [
+      "Tianyu Li",
+      "Yihang Qiu",
+      "Zhenhua Wu",
+      "Carl Lindstrom¨",
+      "Peng Su",
+      "Matthias Nießner",
+      "Hongyang Li"
+    ],
+    "year": 2025,
+    "venue": "",
+    "doi": "",
+    "arxiv_id": "2503.12552",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "",
+    "code_url": "",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "多次行驶采集的数据提供更丰富的场景视角，但光照、曝光和动态物体的变化妨碍统一重建。MTGS 使用多遍历场景图共享静态背景几何，并以遍历专属的外观节点和暂态节点分别建模外观变化及物体。方法结合 LiDAR 引导的曝光对齐、球谐系数残差与几何正则，在 nuPlan 多遍历数据上评估重建及新视角合成。论文报告，相较单遍历基线，LPIPS 改善 23.5%，深度绝对相对误差改善 46.3%。",
+    "one_sentence": "MTGS 通过共享静态几何、遍历专属外观和暂态物体的场景图，将多次行驶数据用于驾驶场景重建与新视角外推。",
+    "research_problem": "如何利用同一道路区块在不同时间采集的多遍历数据，在处理外观变化和场景动态的同时，重建一致的静态几何并提升未见遍历视角的合成质量。",
+    "motivation": "单遍历数据的视角覆盖有限；跨车道的多遍历观测可提供更丰富的几何约束，支持可驾驶区域内更广泛的视角合成。",
+    "core_idea": "将跨遍历不变的背景几何与随遍历变化的外观、暂态物体分离：共享静态节点承载背景，每次遍历通过自己的外观节点和暂态节点组成渲染子图。",
+    "method_summary": "基于 3DGS 构建多遍历场景图，利用共享基础球谐颜色和遍历专属残差表达背景外观；以物体位姿变换放置暂态节点；通过 LiDAR 曝光对齐和图像级仿射变换协调颜色，并联合优化光度、深度、法线及越界正则。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E07",
+      "E09",
+      "E14",
+      "E19",
+      "E28",
+      "E29"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "共享背景与遍历专属节点的场景图",
+      "description": "提出多遍历场景图，以共享静态节点表示背景，并通过外观节点和暂态节点分别保存遍历间的外观差异与动态信息。",
+      "evidence_ids": [
+        "E03",
+        "E06"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "跨遍历外观表达与遍历内对齐",
+      "description": "仅共享旋转不变球谐项，以遍历专属球谐残差表达光照、反射和色调变化；同时采用 LiDAR 引导的曝光对齐及图像级仿射参数。",
+      "evidence_ids": [
+        "E04",
+        "E05",
+        "E07",
+        "E08"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "多遍历视角外推评估",
+      "description": "在 nuPlan 的六个道路区块中，以跨车道训练遍历和空间重叠较少的独立测试遍历评估视角外推；论文报告多遍历数据带来的质量收益及相对已有方法的性能提升。",
+      "evidence_ids": [
+        "E20",
+        "E28",
+        "E29",
+        "E30",
+        "E31"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "同一道路区块在不同时间采集的多遍历视频图像",
+      "对应的相机位姿与内参",
+      "用于初始化和稀疏深度先验的彩色 LiDAR 点云",
+      "数据集提供的物体三维边界框",
+      "UniDepth 生成的伪深度"
+    ],
+    "outputs": [
+      "包含共享静态节点、遍历专属外观节点和暂态节点的场景表示",
+      "按相机位姿、时间和遍历条件渲染的 RGB、深度及法线图",
+      "未见遍历视角的渲染结果"
+    ],
+    "components": [
+      {
+        "name": "共享静态节点",
+        "description": "跨遍历共享背景的几何、透明度及基础颜色；仅共享旋转不变球谐项，以约束背景的自然颜色和几何一致性。",
+        "evidence_ids": [
+          "E03",
+          "E04"
+        ]
+      },
+      {
+        "name": "遍历专属外观节点",
+        "description": "以每个背景 Gaussian 的球谐系数残差表达遍历相关的光照、反射和整体色调变化。",
+        "evidence_ids": [
+          "E05"
+        ]
+      },
+      {
+        "name": "暂态节点",
+        "description": "由三维边界框初始化物体节点、尺寸和随时间变化的位姿，将节点局部坐标中的 Gaussians 变换到世界坐标；越界损失抑制节点通过漂浮点过拟合背景。",
+        "evidence_ids": [
+          "E06",
+          "E13"
+        ]
+      },
+      {
+        "name": "LiDAR 引导的曝光对齐与仿射变换",
+        "description": "将同时刻的彩色 LiDAR 点投影到不同相机图像，调整曝光使同一点对应的像素颜色一致。论文称仿射模块为 per-camera affine，但明确说明不同图像使用独立参数。",
+        "evidence_ids": [
+          "E07",
+          "E08"
+        ]
+      },
+      {
+        "name": "深度与法线约束",
+        "description": "使用 LiDAR 逆深度 L1 损失，并通过局部 NCC 对齐伪深度与渲染深度；将 Gaussian 最短缩放轴作为几何法线，结合法线监督、TV 平滑和 Gaussian 扁平化正则。",
+        "evidence_ids": [
+          "E09",
+          "E10",
+          "E11",
+          "E12",
+          "E15"
+        ]
+      },
+      {
+        "name": "数据对齐与联合优化",
+        "description": "使用 LiDAR 配准对齐多遍历位姿，并以 COLMAP 束调整校准相机。所有 MTGS 组件联合优化，默认采用 Adam 训练 30k 步。",
+        "evidence_ids": [
+          "E14",
+          "E23",
+          "E39",
+          "E40"
+        ]
+      }
+    ],
+    "pipeline": [
+      "对齐多遍历 LiDAR 与相机数据，校准相机参数。",
+      "根据聚合点云和三维边界框初始化背景及暂态物体节点。",
+      "建立共享静态节点，并为各遍历建立外观节点和暂态节点。",
+      "对齐遍历内曝光，以图像级仿射变换进一步协调外观。",
+      "选择遍历子图，应用球谐残差及物体位姿后渲染 RGB、深度和法线。",
+      "联合优化光度损失、深度约束、法线约束及其他正则。",
+      "对未见遍历使用最近训练遍历的外观节点进行渲染。"
+    ],
+    "details": "输入以时间和遍历索引组织。背景假定跨遍历共享几何；前景物体随遍历变化。训练使用 UniDepth 伪深度，并以 NCC 约束局部深度结构。未见遍历的外观取自最近的训练遍历；新视角评估中暂态元素被掩蔽。",
+    "evidence_ids": [
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E17",
+      "E18",
+      "E21",
+      "E23",
+      "E24",
+      "E38",
+      "E39",
+      "E40",
+      "E41"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "nuPlan"
+    ],
+    "benchmarks": [
+      "论文构建的 nuPlan 多遍历视角外推评估：六个道路区块，选取空间重叠较少的独立遍历作为测试遍历"
+    ],
+    "metrics": [
+      "PSNR ↑",
+      "affine-aligned PSNR（PSNR*）↑",
+      "SSIM ↑",
+      "LPIPS ↓",
+      "DINOv2 feature cosine similarity（Feat. Sim.）↑",
+      "absolute relative depth error（AbsRel）↓",
+      "δ1.25（Delta1）↑"
+    ],
+    "baselines": [
+      "3DGS",
+      "Street Gaussians",
+      "OmniRe",
+      "WildGaussians 外观模块的流水线内重实现"
+    ],
+    "main_results": [
+      {
+        "text": "论文报告，相较单遍历重建，多遍历方法的 SSIM 最多改善 18.5%，LPIPS 改善 23.5%，深度绝对相对误差改善 46.3%。",
+        "evidence_ids": [
+          "E28",
+          "E29"
+        ]
+      },
+      {
+        "text": "论文在贡献总结中报告，相较此前 SOTA，SSIM 改善 17.6%，LPIPS 改善 42.4%，AbsRel 改善 35%。",
+        "evidence_ids": [
+          "E30"
+        ]
+      },
+      {
+        "text": "遍历数量消融显示，加入更多遍历能够提升 MTGS 在未见遍历上的整体渲染质量。",
+        "evidence_ids": [
+          "E31"
+        ]
+      },
+      {
+        "text": "模块消融显示，移除暂态节点降低几何精度；移除法线平滑损失损害特征层指标；移除深度损失显著妨碍几何学习。",
+        "evidence_ids": [
+          "E33",
+          "E49",
+          "E50"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E19",
+      "E20",
+      "E21",
+      "E22",
+      "E23",
+      "E25",
+      "E26",
+      "E27",
+      "E28",
+      "E29",
+      "E30",
+      "E31",
+      "E32",
+      "E33",
+      "E48",
+      "E49",
+      "E50",
+      "E51"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "当前版本不重建自行车、行人等非刚性物体。",
+      "evidence_ids": [
+        "E34"
+      ]
+    },
+    {
+      "text": "训练遍历未观测的区域，例如停放车辆下方，可能出现漂浮伪影。",
+      "evidence_ids": [
+        "E35"
+      ]
+    },
+    {
+      "text": "滚动快门效应，尤其在反向遍历中，会导致共享几何错位。",
+      "evidence_ids": [
+        "E36",
+        "E37"
+      ]
+    },
+    {
+      "text": "方法假定静态几何保持不变，未标注暂态物体和地图变化的建模重建仍待解决。",
+      "evidence_ids": [
+        "E38"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：这项工作的重点在于把多遍历观测组织成共享几何与遍历专属外观、物体的结构，使额外观测更容易转化为几何约束。实验结论需要结合测试协议理解：未见遍历的暂态元素被掩蔽，因此现有证据主要支持背景视角外推，而不能直接证明对未见动态物体的重建能力。论文摘要式的相对提升数字也应结合具体比较对象和聚合方式阅读。",
+    "open_questions": [
+      "在测试中保留动态物体后，整体渲染质量和几何一致性如何变化？",
+      "最近训练遍历的外观节点能否适应测试遍历中差异较大的光照？",
+      "共享基础球谐颜色与遍历专属残差的分解在极端外观变化下是否稳定？",
+      "地图变化、未标注物体及更长时间跨度会怎样影响共享静态背景假设？",
+      "改进定位和滚动快门建模后，视角外推性能还能获得多少收益？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "Abstract",
+      "page": 1,
+      "content": "modeling a shared static geometry while separately handling dynamic elements and appearance variations."
+    },
+    {
+      "id": "E02",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "views distributed across multiple lanes provide richer geometric constraints, potentially enabling view interpolation across the entire drivable area."
+    },
+    {
+      "id": "E03",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "including a shared static node that represents background geometry, an appearance node to model various appearances, and a transient node to preserve dynamic information."
+    },
+    {
+      "id": "E04",
+      "section": "4.1. Multi-Traversal Scene Graph",
+      "page": 5,
+      "content": "only the coefficient for the rotationinvariant spherical harmonic"
+    },
+    {
+      "id": "E05",
+      "section": "4.1. Multi-Traversal Scene Graph",
+      "page": 5,
+      "content": "Changes of appearances in different traversals, e.g., lighting, reflections, and overall color tone, are captured by residual coefficients"
+    },
+    {
+      "id": "E06",
+      "section": "4.1. Multi-Traversal Scene Graph",
+      "page": 5,
+      "content": "From 3D boxes, we get transient nodes along with their sizes and transformations of poses over time."
+    },
+    {
+      "id": "E07",
+      "section": "4.2. Appearance Modeling",
+      "page": 5,
+      "content": "pixels corresponding to the same LiDAR point are of the same color."
+    },
+    {
+      "id": "E08",
+      "section": "4.2. Appearance Modeling",
+      "page": 5,
+      "content": "different parameters for different images."
+    },
+    {
+      "id": "E09",
+      "section": "4.3. Regularization and Training",
+      "page": 5,
+      "content": "The LiDAR depth loss contains an inverse L1 loss and a patch-wise normalized cross-correlation loss."
+    },
+    {
+      "id": "E10",
+      "section": "4.3. Regularization and Training",
+      "page": 6,
+      "content": "NCC evaluates the similarity between scale-ambiguous pseudo depth and rendered depth patches, ensuring local consistency in depth rendering:"
+    },
+    {
+      "id": "E11",
+      "section": "4.3. Regularization and Training",
+      "page": 6,
+      "content": "the normal is defined as the direction of the smallest scaling axis of the Gaussian"
+    },
+    {
+      "id": "E12",
+      "section": "4.3. Regularization and Training",
+      "page": 6,
+      "content": "To deal with noise in the pseudo normal, we introduce a total variation (TV) loss on the renderer normal."
+    },
+    {
+      "id": "E13",
+      "section": "4.1. Multi-Traversal Scene Graph",
+      "page": 5,
+      "content": "To prevent transient nodes from using floaters to overfit the backgrounds, an out-of-box loss is also introduced as:"
+    },
+    {
+      "id": "E14",
+      "section": "4.3. Regularization and Training",
+      "page": 6,
+      "content": "In the end, all components of MTGS are optimized jointly using the overall training loss:"
+    },
+    {
+      "id": "E15",
+      "section": "4.3. Regularization and Training",
+      "page": 6,
+      "content": "we add a Gaussian flatten regularization loss"
+    },
+    {
+      "id": "E16",
+      "section": "3.2. Problem Formulation",
+      "page": 4,
+      "content": "The inputs for the task are videos captured in the same block but in different times."
+    },
+    {
+      "id": "E17",
+      "section": "3.2. Problem Formulation",
+      "page": 4,
+      "content": "are given with corresponding camera poses"
+    },
+    {
+      "id": "E18",
+      "section": "3.2. Problem Formulation",
+      "page": 4,
+      "content": "Colored LiDAR point clouds"
+    },
+    {
+      "id": "E19",
+      "section": "5.1. Setup and Protocols",
+      "page": 6,
+      "content": "We use all eight views and LiDAR at 10 Hz, with the resolution of 960 × 540"
+    },
+    {
+      "id": "E20",
+      "section": "5.1. Setup and Protocols",
+      "page": 6,
+      "content": "We select six road blocks with multi-traversal data distributed across multiple lanes and evaluate one isolated traversal with minimal spatial overlap with others."
+    },
+    {
+      "id": "E21",
+      "section": "5.1. Setup and Protocols",
+      "page": 6,
+      "content": "All transient elements are masked when assessing novel-view traversals, as they are entirely unseen in training."
+    },
+    {
+      "id": "E22",
+      "section": "5.1. Setup and Protocols",
+      "page": 6,
+      "content": "We select three baselines, 3DGS [17], Street Gaussians [45], and OmniRe [3]."
+    },
+    {
+      "id": "E23",
+      "section": "5.1. Setup and Protocols",
+      "page": 6,
+      "content": "By default, we train all methods with 30k steps using Adam optimizers."
+    },
+    {
+      "id": "E24",
+      "section": "5.1. Setup and Protocols",
+      "page": 6,
+      "content": "As for unseen traversals, the appearance node of its nearest training traversal is used for appearance tuning."
+    },
+    {
+      "id": "E25",
+      "section": "5.1. Setup and Protocols",
+      "page": 6,
+      "content": "We use peak signal-to-noise ratio (PSNR), structural similarity index measure (SSIM) [38], and affine-aligned PSNR [1] for novel-view traversals."
+    },
+    {
+      "id": "E26",
+      "section": "5.1. Setup and Protocols",
+      "page": 7,
+      "content": "We employ learned perceptual im age patch similarity (LPIPS) [51] and DINOv2 [28] feature cosine similarity (Feat. Sim.)"
+    },
+    {
+      "id": "E27",
+      "section": "5.1. Setup and Protocols",
+      "page": 7,
+      "content": "between the rendered depth and projected LiDAR depth within an 80-meter range."
+    },
+    {
+      "id": "E28",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "achieving up to an 18.5% improvement on the pixel-level metric (SSIM), 23.5% on the feature-level metric (LPIPS),"
+    },
+    {
+      "id": "E29",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "and 46.3% on the geometrylevel metric (absolute depth relative error)."
+    },
+    {
+      "id": "E30",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "It outperforms pre-vious SOTA by 17.6% on SSIM, 42.4% on LPIPS and 35% on AbsRel."
+    },
+    {
+      "id": "E31",
+      "section": "5.3. Ablation Study",
+      "page": 7,
+      "content": "our method enhances overall rendering quality on novelview traversals as more traversals are incorporated."
+    },
+    {
+      "id": "E32",
+      "section": "5.3. Ablation Study",
+      "page": 8,
+      "content": "We re-implement its per-camera and per-gaussian appearance embeddings within our pipeline."
+    },
+    {
+      "id": "E33",
+      "section": "5.3. Ablation Study",
+      "page": 8,
+      "content": "removing the depth loss (ID 2) significantly harms learning the geometry."
+    },
+    {
+      "id": "E34",
+      "section": "6. Conclusion and Outlook",
+      "page": 8,
+      "content": "In the current version, non-rigid objects, such as bicycles or pedestrians, are not reconstructed in the scene."
+    },
+    {
+      "id": "E35",
+      "section": "6. Conclusion and Outlook",
+      "page": 8,
+      "content": "there might be floating artifacts in regions not observed during training traversals, such as the space below parked cars."
+    },
+    {
+      "id": "E36",
+      "section": "6. Conclusion and Outlook",
+      "page": 8,
+      "content": "We also observe that rolling shutter effects, particularly in inverted traversals, introduce"
+    },
+    {
+      "id": "E37",
+      "section": "6. Conclusion and Outlook",
+      "page": 9,
+      "content": "misalignment in the shared geometry."
+    },
+    {
+      "id": "E38",
+      "section": "6. Conclusion and Outlook",
+      "page": 9,
+      "content": "The static geometry of the scene is assumed to remain unchanged. Modeling and reconstruction of unlabeled transient objects and map changes"
+    },
+    {
+      "id": "E39",
+      "section": "A.1. Dataset",
+      "page": 12,
+      "content": "we employ a LiDAR registration method [37] to align the multi-traversal poses accurately."
+    },
+    {
+      "id": "E40",
+      "section": "A.1. Dataset",
+      "page": 12,
+      "content": "we employ several rounds of bundle adjustment of COLMAP [31, 32] to calibrate them."
+    },
+    {
+      "id": "E41",
+      "section": "A.1. Dataset",
+      "page": 12,
+      "content": "The pseudo depth used during training is obtained from UniDepth [29] with a ViT-L [6] backbone."
+    },
+    {
+      "id": "E42",
+      "section": "References",
+      "page": 9,
+      "content": "OmniRe: Omni urban scene reconstruction. In ICLR, 2025."
+    },
+    {
+      "id": "E43",
+      "section": "References",
+      "page": 10,
+      "content": "Street Gaussians: Modeling dynamic urban scenes with gaussian splatting. In ECCV, 2024."
+    },
+    {
+      "id": "E44",
+      "section": "References",
+      "page": 9,
+      "content": "3D gaussian splatting for real-time radiance field rendering. ACM TOG, 2023."
+    },
+    {
+      "id": "E45",
+      "section": "References",
+      "page": 9,
+      "content": "WildGaussians: 3D gaussian splatting in the wild. In NeurIPS, 2024."
+    },
+    {
+      "id": "E46",
+      "section": "References",
+      "page": 9,
+      "content": "Towards learning-based planning: The nuplan benchmark for real-world autonomous driving. In ICRA, 2024."
+    },
+    {
+      "id": "E47",
+      "section": "References",
+      "page": 10,
+      "content": "UniDepth: Universal monocular metric depth estimation. In CVPR, 2024."
+    },
+    {
+      "id": "E48",
+      "section": "5.1. Setup and Protocols",
+      "page": 7,
+      "content": "<td>AbsRel ↓</td><td>Delta1 ↑</td>"
+    },
+    {
+      "id": "E49",
+      "section": "5.3. Ablation Study",
+      "page": 8,
+      "content": "removing the transient node (ID 0) degrades geometry accuracy"
+    },
+    {
+      "id": "E50",
+      "section": "5.3. Ablation Study",
+      "page": 8,
+      "content": "Removing the normal smooth loss (ID 1) adversely affects the feature-level metrics"
+    },
+    {
+      "id": "E51",
+      "section": "5.3. Ablation Study",
+      "page": 8,
+      "content": "We also compare our approach with a state-of-the-art Gaussian-based in-the-wild method, WildGaussians [19]."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "3D gaussian splatting for real-time radiance field rendering",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "作为主要对比基线；MTGS 的场景表示也建立在 3DGS 上。",
+      "source": "body_citation",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E22",
+        "E44"
+      ]
+    },
+    {
+      "title": "OmniRe: Omni urban scene reconstruction",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "作为驾驶场景重建基线，与 MTGS 比较单遍历和多遍历条件下的性能。",
+      "source": "body_citation",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E22",
+        "E42"
+      ]
+    },
+    {
+      "title": "Street Gaussians: Modeling dynamic urban scenes with gaussian splatting",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "作为主要驾驶场景重建对比基线。",
+      "source": "body_citation",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E22",
+        "E43"
+      ]
+    },
+    {
+      "title": "WildGaussians: 3D gaussian splatting in the wild",
+      "paper_id": null,
+      "relation_type": "compares_with",
+      "description": "论文在自己的流水线中重实现其相机级和 Gaussian 级外观嵌入，用于外观建模对比。",
+      "source": "body_citation",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E32",
+        "E45",
+        "E51"
+      ]
+    },
+    {
+      "title": "Towards learning-based planning: The nuplan benchmark for real-world autonomous driving",
+      "paper_id": null,
+      "relation_type": "uses_dataset",
+      "description": "提供实验使用的 nuPlan 驾驶数据，论文从中选取多遍历道路区块。",
+      "source": "body_citation",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E19",
+        "E20",
+        "E46"
+      ]
+    },
+    {
+      "title": "UniDepth: Universal monocular metric depth estimation",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "提供训练使用的伪深度，用于局部 NCC 深度约束。",
+      "source": "body_citation",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E10",
+        "E41",
+        "E47"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F2",
+      "caption": "Figure 2. Overview. MTGS reconstructs a scene graph from multi-traversal sensor sequences. The scene graph consists of three types of nodes. (a) The rendering of a traversal subgraph starts with a shared static node, representing the time-invariant part of the scene. (b) This is followed by an appearance node that applies traversal-specific appearance effects, such as lighting and shadows. (c) Finally, transient nodes are placed in the background. (d) We align exposure using the overlapping LiDAR point cloud to ensure lighting consistency within the subgraph. (e) Photometric loss and multiple geometric losses are applied to bootstrap the reconstruction fidelity.",
+      "description": "总体方法图展示多遍历数据、场景图与训练监督。下方 (a) 共享静态节点包含基础球谐颜色和几何；两条不同颜色的遍历分支经 (b) 每个 Gaussian 的可学习球谐残差，再通过 pose(t) 接入 (c) 移动及停放车辆的暂态节点，形成各自的遍历子图。右侧显示 RGB、深度和法线渲染，并以箭头连接到 (e) 光度损失、块级 LiDAR 深度损失、法线平滑损失及其他正则。上方 (d) 展示曝光对齐前后的示意。这张图集中说明共享背景与遍历专属外观、物体如何组成 MTGS 的核心表示。",
+      "page": 4,
+      "path": "/paper-assets/mtgs-2025/f2.webp",
+      "type": "method_overview"
+    }
+  ],
+  "tags": [],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T13:35:54+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.2",
+    "source_hash": "a71534dade35e6e0b806e0c13e2a6ced9fb022202fdf5ff74edaa8ee21f2184b",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

@@ -1,0 +1,879 @@
+{
+  "schema_version": "1.0",
+  "id": "navsim-2024",
+  "metadata": {
+    "title": "NAVSIM: Data-Driven Non-Reactive Autonomous Vehicle Simulation and Benchmarking",
+    "short_title": "NAVSIM",
+    "authors": [
+      "Daniel Dauner",
+      "Marcel Hallgarten",
+      "Tianyu Li",
+      "Xinshuo Weng",
+      "Zhiyu Huang",
+      "Zetong Yang",
+      "Hongyang Li",
+      "Igor Gilitschenski",
+      "Boris Ivanovic",
+      "Marco Pavone",
+      "Andreas Geiger",
+      "Kashyap Chitta"
+    ],
+    "year": 2024,
+    "venue": "NeurIPS 2024, Track on Datasets and Benchmarks",
+    "doi": "",
+    "arxiv_id": "2406.15349",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "",
+    "code_url": "https://github.com/autonomousvision/navsim",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "论文提出 NAVSIM，在真实传感器数据上的开环评估与闭环仿真之间建立一种非反应式评估方案。策略根据场景初始输入生成固定轨迹，系统在短时鸟瞰场景中模拟其执行，并以安全、舒适和进展等指标评分。论文提供具有挑战性的标准数据划分，发现该评分比传统位移误差更接近闭环评估结果；在统一基准上，计算需求较低的 TransFuser 可达到与 UniAD、PARA-Drive 相近的表现。框架还支持公开评测和竞赛。",
+    "one_sentence": "NAVSIM 利用真实传感器输入、短时非反应式仿真和多目标驾驶评分，为端到端驾驶策略提供标准化评估。",
+    "research_problem": "如何在保留真实传感器输入、控制评估成本的同时，比轨迹位移误差更准确地衡量驾驶策略的规划质量。",
+    "motivation": "传统开环结果不能充分反映闭环驾驶表现，而闭环传感器仿真的计算成本和真实数据域差距限制了大规模评估。",
+    "core_idea": "假定策略与环境在短时评估期间不相互影响，固定策略输出轨迹，在鸟瞰场景中模拟执行，并计算碰撞、道路合规、进展、安全裕度和舒适性。",
+    "method_summary": "从 OpenScene 筛选非平凡且人工轨迹评分合格的场景；策略仅在初始时刻生成四秒轨迹；使用 LQR 控制器和运动学自行车模型执行轨迹；聚合仿真子分数为 PDMS，并通过统一数据划分和公开服务器评测。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E18",
+      "E20",
+      "E21",
+      "E27",
+      "E30",
+      "E32",
+      "E52",
+      "E53"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "非反应式驾驶仿真与标准化评测框架",
+      "description": "构建 NAVSIM，提供统一训练与测试协议、数据筛选工具、具有挑战性的 navtrain/navtest 划分以及公开评测服务器。",
+      "evidence_ids": [
+        "E03",
+        "E04",
+        "E19",
+        "E20",
+        "E21"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "可配置的仿真驾驶指标",
+      "description": "以 PDMS 聚合碰撞、可驾驶区域合规、进展、碰撞时间和舒适性；实验显示其与闭环评分的相关性优于传统距离类开环评分。",
+      "evidence_ids": [
+        "E05",
+        "E14",
+        "E15",
+        "E16",
+        "E27",
+        "E28"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "统一重实现与跨基准方法比较",
+      "description": "在 NAVSIM 中重实现 TransFuser、UniAD 和 PARA-Drive 等端到端方法，展示简单模型在挑战场景中的竞争力及不同方法的训练计算需求差异。",
+      "evidence_ids": [
+        "E06",
+        "E30",
+        "E31",
+        "E32",
+        "E33"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "驾驶策略：摄像头、LiDAR 等车载传感器的当前及历史帧。",
+      "驾驶策略：当前速度、加速度和导航目标组成的 ego status。",
+      "OpenScene 输入可包含当前帧及额外三帧历史，总计 1.5 秒、频率 2Hz。",
+      "数据与评估层：传感器数据、标注 HD 地图和目标包围盒。"
+    ],
+    "outputs": [
+      "驾驶策略输出：四秒内的一系列未来车辆位姿。",
+      "评估输出：NC、DAC、EP、TTC、C 子分数及聚合后的 PDMS。"
+    ],
+    "components": [
+      {
+        "name": "挑战场景筛选",
+        "description": "剔除恒定速度与航向基线 PDMS 高于 0.8 的简单场景，以及人工轨迹 PDMS 低于 0.8 的场景，形成 navtrain 和 navtest。",
+        "evidence_ids": [
+          "E19",
+          "E20",
+          "E21"
+        ]
+      },
+      {
+        "name": "导航目标生成",
+        "description": "从车道图而非人工轨迹生成导航目标，以避免标签泄漏；输入编码为左转、直行、右转三类 one-hot 向量。",
+        "evidence_ids": [
+          "E17",
+          "E49"
+        ]
+      },
+      {
+        "name": "非反应式轨迹评估",
+        "description": "仅在每个场景的初始帧查询策略，随后保持预测轨迹固定。评估窗口为四秒，策略与环境不相互影响。",
+        "evidence_ids": [
+          "E02",
+          "E09",
+          "E10"
+        ]
+      },
+      {
+        "name": "车辆运动执行",
+        "description": "LQR 控制器计算转向和加速度，运动学自行车模型推进自车状态；以 10Hz 执行四秒轨迹。",
+        "evidence_ids": [
+          "E11",
+          "E12"
+        ]
+      },
+      {
+        "name": "PDM Score",
+        "description": "采用源自 Predictive Driver Model 的评分：NC 和 DAC 构成乘法惩罚，EP、TTC、C 构成加权平均。严重碰撞或驶出可驾驶区域可使场景 PDMS 为零。",
+        "evidence_ids": [
+          "E13",
+          "E14",
+          "E15",
+          "E16"
+        ]
+      }
+    ],
+    "pipeline": [
+      "将 OpenScene 真实传感器记录、地图和目标标注用于场景构建。",
+      "根据恒定速度基线与人工轨迹的 PDMS 筛选场景，建立标准划分。",
+      "从车道图生成导航目标，与传感器帧及 ego status 一并输入驾驶策略。",
+      "在初始帧生成并固定四秒未来轨迹。",
+      "以 LQR 和运动学自行车模型在非反应式场景中执行轨迹。",
+      "计算驾驶子分数并聚合为 PDMS。"
+    ],
+    "details": "该方案通过固定轨迹和非反应式环境，避免在仿真中持续生成策略所需的高维传感器反馈。数据接口可接受提供 HD 地图、目标包围盒和传感器数据的驾驶数据集。本文使用 OpenScene，即 nuPlan 的再分发版本。",
+    "evidence_ids": [
+      "E02",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E17",
+      "E18",
+      "E19",
+      "E20",
+      "E21",
+      "E47",
+      "E48",
+      "E49"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "OpenScene：nuPlan 的再分发版本。",
+      "navtrain：103k 样本。",
+      "navtest：12k 样本。",
+      "navmini：396 个场景，独立于 navtrain 和 navtest，采用相同筛选策略。",
+      "CVPR 2024 NAVSIM Challenge 私有评测数据集。"
+    ],
+    "benchmarks": [
+      "NAVSIM navtest",
+      "nuPlan 闭环与开环评分对齐评估",
+      "CVPR 2024 NAVSIM Challenge",
+      "NAVSIM 1.1 Leaderboard"
+    ],
+    "metrics": [
+      "PDM Score（PDMS）",
+      "No at-fault collision（NC）",
+      "Drivable area compliance（DAC）",
+      "Ego progress（EP）",
+      "Time-to-collision（TTC）",
+      "Comfort（C）",
+      "nuPlan open-loop score（OLS）",
+      "nuPlan closed-loop score（CLS）",
+      "Spearman 秩相关系数",
+      "Pearson 线性相关系数"
+    ],
+    "baselines": [
+      "Constant Velocity",
+      "Ego Status MLP",
+      "Latent TransFuser（LTF）",
+      "TransFuser",
+      "UniAD",
+      "PARA-Drive",
+      "Constant Acceleration",
+      "Intelligent Driver Model（IDM）",
+      "PDM-Closed",
+      "Urban Driver",
+      "PlanCNN"
+    ],
+    "main_results": [
+      {
+        "text": "场景筛选使恒定速度基线的 PDMS 从 79% 降至 22%，人工轨迹从 91% 提升至 95%，表明筛选减少了容易由简单运动外推解决的场景。",
+        "evidence_ids": [
+          "E22",
+          "E23"
+        ]
+      },
+      {
+        "text": "在 navmini 上比较 37 个规则规划器和 114 个学习规划器，PDMS 相较 OLS 与 CLS 具有更高的 Spearman 和 Pearson 相关性；分规划器类型分析时，PDMS 对 CLS 均保持正相关且优于 OLS。",
+        "evidence_ids": [
+          "E24",
+          "E25",
+          "E26",
+          "E27",
+          "E28"
+        ]
+      },
+      {
+        "text": "navtest 上，Ego Status MLP 的 PDMS 为 65.6%；TransFuser 与 PARA-Drive 均为 84.0%，仅摄像头输入的 LTF 为 83.8%，UniAD 为 83.4%。人工轨迹为 94.8%，传感器方法仍存在明显差距。",
+        "evidence_ids": [
+          "E29",
+          "E30",
+          "E31",
+          "E32",
+          "E34"
+        ]
+      },
+      {
+        "text": "本文报告在 navtrain 上训练 PARA-Drive 需要 80 张 GPU、三天，而 TransFuser 使用一张 GPU、一天；两者报告的 navtest PDMS 均为 84.0%。",
+        "evidence_ids": [
+          "E30",
+          "E33"
+        ]
+      },
+      {
+        "text": "NAVSIM 对确定性驾驶策略重复评估得到相同分数，作者据此指出评测具有确定性。",
+        "evidence_ids": [
+          "E35"
+        ]
+      },
+      {
+        "text": "CVPR 2024 挑战收到 143 支队伍的 463 次提交，其中 78 次公开。后续 NAVSIM 1.1 排行榜列出挑战获胜方法 Hydra-MDP 的单训练种子 PDMS 为 91.3%。",
+        "evidence_ids": [
+          "E36",
+          "E37",
+          "E38"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E06",
+      "E14",
+      "E15",
+      "E18",
+      "E19",
+      "E22",
+      "E23",
+      "E24",
+      "E25",
+      "E26",
+      "E27",
+      "E28",
+      "E29",
+      "E30",
+      "E31",
+      "E32",
+      "E33",
+      "E34",
+      "E35",
+      "E36",
+      "E37",
+      "E38",
+      "E50",
+      "E54"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "非反应式评估不覆盖交互反应和闭环误差累积；较高 PDMS 并不总意味着较高 CLS。",
+      "evidence_ids": [
+        "E39",
+        "E40"
+      ]
+    },
+    {
+      "text": "其他车辆从后方撞入自车通常不被归为自车责任碰撞，使车辆后方场景在当前评估中受到较少重视。",
+      "evidence_ids": [
+        "E41"
+      ]
+    },
+    {
+      "text": "PDMS 继承 nuPlan CLS 的部分缺点，未覆盖停止标志、交通信号灯遵守情况，以及通行和燃油效率等概念。",
+      "evidence_ids": [
+        "E42"
+      ]
+    },
+    {
+      "text": "nuPlan 的类别缺失、相机参数误差、车辆位姿和三维标注噪声仍存在；分析可能偏向更能容忍这些不一致的方法。",
+      "evidence_ids": [
+        "E43",
+        "E44"
+      ]
+    },
+    {
+      "text": "场景表示缺少道路高程数据，给整合基于三维地图标注的场景带来困难。",
+      "evidence_ids": [
+        "E45"
+      ]
+    },
+    {
+      "text": "相关性研究中不同规划器类型数量不平衡，可能使总体相关系数产生偏差；论文因此补充分类型分析。",
+      "evidence_ids": [
+        "E46",
+        "E28"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI解读：论文的主要价值在于改变评估对象，从与单条人工轨迹的接近程度，转向固定计划执行后的驾驶后果。不确定推断：这种设计可能更有利于识别安全但不同于人工记录的轨迹；其方法排序仍应结合反应式闭环评估理解。",
+    "open_questions": [
+      "在需要多车协商、持续重规划或长期决策的场景中，PDMS 与闭环表现的排序一致性会如何变化？",
+      "调整责任碰撞规则、增加交通信号灯等子分数后，现有方法排序是否稳定？",
+      "使用不同数据集或更准确的地图与标注后，简单模型与复杂模型之间的差距是否改变？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "Abstract",
+      "page": 1,
+      "content": "open-loop evaluation with real data is easy, but these results do not reflect closedloop performance."
+    },
+    {
+      "id": "E02",
+      "section": "Abstract",
+      "page": 1,
+      "content": "Our simulation is non-reactive, i.e., the evaluated policy and environment do not influence each other."
+    },
+    {
+      "id": "E03",
+      "section": "1 Introduction",
+      "page": 3,
+      "content": "We build NAVSIM, a framework for non-reactive AV simulation, with standardized protocols for training and testing,"
+    },
+    {
+      "id": "E04",
+      "section": "1 Introduction",
+      "page": 3,
+      "content": "an official public evaluation server used for the inaugural NAVSIM challenge."
+    },
+    {
+      "id": "E05",
+      "section": "1 Introduction",
+      "page": 3,
+      "content": "We develop configurable simulation-based metrics that are well-suited for evaluating sensor-based motion planning."
+    },
+    {
+      "id": "E06",
+      "section": "1 Introduction",
+      "page": 3,
+      "content": "We reimplement a collection of end-to-end approaches for NAVSIM including TransFuser, UniAD, and PARA-Drive,"
+    },
+    {
+      "id": "E07",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "Their input contains streams of past frames from onboard sensors, such as cameras, LiDAR,"
+    },
+    {
+      "id": "E08",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "the vehicle’s current speed, acceleration, and navigation goal, jointly termed the ego status."
+    },
+    {
+      "id": "E09",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "We select a horizon of $h = 4$ seconds,"
+    },
+    {
+      "id": "E10",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "This means driving agents are only queried in the initial frame of each scene. Afterwards, the planned trajectory is kept fixed"
+    },
+    {
+      "id": "E11",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "An LQR controller [28] is applied at each simulation iteration to calculate steering and acceleration values,"
+    },
+    {
+      "id": "E12",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "a kinematic bicycle model [37] propagates the ego vehicle. We execute this pipeline at 10Hz over the 4s trajectory horizon."
+    },
+    {
+      "id": "E13",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "It is named after the Predictive Driver Model (PDM) [16],"
+    },
+    {
+      "id": "E14",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "The weighted average accounts for ego progress (EP), time-to-collision (TTC), and comfort (C)."
+    },
+    {
+      "id": "E15",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "Subscores are categorized by their importance as penalties or terms in a weighted average."
+    },
+    {
+      "id": "E16",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "This results in a PDMS of 0 for the current scene."
+    },
+    {
+      "id": "E17",
+      "section": "2 Related Work",
+      "page": 3,
+      "content": "We derive a navigation goal from the lane graph instead of the human trajectory to prevent label leakage,"
+    },
+    {
+      "id": "E18",
+      "section": "3.1 Generating Standardized and Challenging Train and Test Splits",
+      "page": 5,
+      "content": "We choose Open-Scene [15], a redistribution of nuPlan [26], the largest annotated public driving dataset."
+    },
+    {
+      "id": "E19",
+      "section": "3.1 Generating Standardized and Challenging Train and Test Splits",
+      "page": 5,
+      "content": "called navtrain and navtest, with 103k and 12k samples respectively."
+    },
+    {
+      "id": "E20",
+      "section": "3.1 Generating Standardized and Challenging Train and Test Splits",
+      "page": 5,
+      "content": "We remove highly simplistic scenes by detecting if the previously mentioned constant velocity agent exceeds a PDMS of 0.8."
+    },
+    {
+      "id": "E21",
+      "section": "3.1 Generating Standardized and Challenging Train and Test Splits",
+      "page": 5,
+      "content": "Similarly, we remove scenes in which the human trajectory results in a PDMS of less than 0.8."
+    },
+    {
+      "id": "E22",
+      "section": "3.1 Generating Standardized and Challenging Train and Test Splits",
+      "page": 5,
+      "content": "achieves a PDMS of 79% on the OpenScene dataset, where human-level performance corresponds to 91%."
+    },
+    {
+      "id": "E23",
+      "section": "3.1 Generating Standardized and Challenging Train and Test Splits",
+      "page": 5,
+      "content": "score of the constant velocity agent dropping to 22%, whereas the human expert achieves a score of 95%."
+    },
+    {
+      "id": "E24",
+      "section": "4.1 Alignment Between Open-Loop and Closed-Loop Evaluation",
+      "page": 6,
+      "content": "with 396 scenarios in total that are independent of both navtrain and navtest but filtered using the same strategy"
+    },
+    {
+      "id": "E25",
+      "section": "4.1 Alignment Between Open-Loop and Closed-Loop Evaluation",
+      "page": 6,
+      "content": "In total, we include 37 rule-based planners"
+    },
+    {
+      "id": "E26",
+      "section": "4.1 Alignment Between Open-Loop and Closed-Loop Evaluation",
+      "page": 6,
+      "content": "giving 114 learned planners."
+    },
+    {
+      "id": "E27",
+      "section": "4.1 Alignment Between Open-Loop and Closed-Loop Evaluation",
+      "page": 6,
+      "content": "Compared to OLS, we consistently observe better closed-loop correlation for PDMS, in terms of Spearman’s (rank) and Pearson’s (linear) correlation coefficients."
+    },
+    {
+      "id": "E28",
+      "section": "4.1 Alignment Between Open-Loop and Closed-Loop Evaluation",
+      "page": 7,
+      "content": "when examining each type individually, the PDMS is better correlated to the CLS than the OLS, and is always positively correlated."
+    },
+    {
+      "id": "E29",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 8,
+      "content": "The Ego Status MLP achieves a PDMS of 65.6,"
+    },
+    {
+      "id": "E30",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 8,
+      "content": "TransFuser and PARA-Drive marginally perform best, with a PDMS of 84.0."
+    },
+    {
+      "id": "E31",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 8,
+      "content": "the camera-only LTF achieves similar results (83.8)."
+    },
+    {
+      "id": "E32",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 8,
+      "content": "UniAD reaches a PDMS of 83.4,"
+    },
+    {
+      "id": "E33",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 8,
+      "content": "80 GPUs for 3 days to train PARA-Drive versus 1 GPU for 1 day for TransFuser on the navtrain split."
+    },
+    {
+      "id": "E34",
+      "section": "4.1 Alignment Between Open-Loop and Closed-Loop Evaluation, Table 1",
+      "page": 7,
+      "content": "| Human |  |  |  | 100 | 100 | 100 | 99.9 | 87.5 | 94.8 |"
+    },
+    {
+      "id": "E35",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 8,
+      "content": "NAVSIM is deterministic, and we obtain identical scores when repeating evaluations of a deterministic driving agent."
+    },
+    {
+      "id": "E36",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 9,
+      "content": "We received 463 submissions from 143 teams, of which 78 submissions were made publicly visible."
+    },
+    {
+      "id": "E37",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving, Table 3",
+      "page": 9,
+      "content": "| Hydra-MDP [30] | 91.3 |"
+    },
+    {
+      "id": "E38",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 9,
+      "content": "For reference, we also include a single seed of the 2024 challenge winner [30] and constant velocity baseline."
+    },
+    {
+      "id": "E39",
+      "section": "5 Discussion",
+      "page": 9,
+      "content": "A high PDMS does not always imply a high CLS, since our framework does not consider reactiveness or the compounding accumulation"
+    },
+    {
+      "id": "E40",
+      "section": "5 Discussion",
+      "page": 10,
+      "content": "of errors in closed-loop simulation."
+    },
+    {
+      "id": "E41",
+      "section": "5 Discussion",
+      "page": 10,
+      "content": "rear-end collisions into the ego vehicle are currently not classified as \"at-fault\", resulting in little importance given to the scene behind the vehicle"
+    },
+    {
+      "id": "E42",
+      "section": "5 Discussion",
+      "page": 10,
+      "content": "Both scores do not regard certain traffic rules (e.g., stop-sign or traffic light compliance) or concepts such as transit and fuel efficiency."
+    },
+    {
+      "id": "E43",
+      "section": "5 Discussion",
+      "page": 10,
+      "content": "missing classes in the label space, minor errors in camera parameters, or noise in vehicle poses and 3D annotations."
+    },
+    {
+      "id": "E44",
+      "section": "5 Discussion",
+      "page": 10,
+      "content": "Our analysis might favor methods that are robust to such inconsistencies."
+    },
+    {
+      "id": "E45",
+      "section": "5 Discussion",
+      "page": 10,
+      "content": "the lack of road elevation data in our representation presents a challenge for integrating scenarios based on 3D map annotations."
+    },
+    {
+      "id": "E46",
+      "section": "4.1 Alignment Between Open-Loop and Closed-Loop Evaluation",
+      "page": 7,
+      "content": "The imbalanced distribution of different types of planners in our study may introduce biases into the overall correlations"
+    },
+    {
+      "id": "E47",
+      "section": "3.1 Generating Standardized and Challenging Train and Test Splits",
+      "page": 5,
+      "content": "The input includes the current time-step and optionally 3 past frames, totaling 1.5s at 2Hz."
+    },
+    {
+      "id": "E48",
+      "section": "3.1 Generating Standardized and Challenging Train and Test Splits",
+      "page": 5,
+      "content": "any driving dataset that provides annotated HD maps, object bounding boxes, and sensor data can be converted into this format"
+    },
+    {
+      "id": "E49",
+      "section": "3 NAVSIM: Non-Reactive Autonomous Vehicle Simulation",
+      "page": 4,
+      "content": "we provide the navigation goal as a one-hot vector with three categories: left, straight, or right."
+    },
+    {
+      "id": "E50",
+      "section": "4.1 Alignment Between Open-Loop and Closed-Loop Evaluation",
+      "page": 6,
+      "content": "we use the nuPlan simulator [26], which enables simulation for privileged planners with access to ground-truth perception and HD map inputs."
+    },
+    {
+      "id": "E51",
+      "section": "5 Discussion",
+      "page": 10,
+      "content": "we strongly encourage the use of graphics-based closed-loop simulators, such as CARLA [17], as complementary benchmarks to NAVSIM"
+    },
+    {
+      "id": "E52",
+      "section": "Abstract",
+      "page": 1,
+      "content": "closed-loop evaluation is possible in simulation, but is hard to scale due to its significant computational demands."
+    },
+    {
+      "id": "E53",
+      "section": "Abstract",
+      "page": 1,
+      "content": "the simulators available today exhibit a large domain gap to real data."
+    },
+    {
+      "id": "E54",
+      "section": "4.2 Analysis of the State of the Art in End-to-End Autonomous Driving",
+      "page": 9,
+      "content": "To ensure integrity, we used a private dataset and only gave participants access to sensor inputs, withholding all annotations."
+    },
+    {
+      "id": "R01",
+      "section": "References",
+      "page": 11,
+      "content": "TransFuser: Imitation with transformer-based sensor fusion for autonomous driving."
+    },
+    {
+      "id": "R02",
+      "section": "References",
+      "page": 11,
+      "content": "Planning-oriented autonomous driving."
+    },
+    {
+      "id": "R03",
+      "section": "References",
+      "page": 13,
+      "content": "Para-drive: Parallelized architecture for real-time autonomous driving."
+    },
+    {
+      "id": "R04",
+      "section": "References",
+      "page": 11,
+      "content": "Openscene: The largest up-to-date 3d occupancy prediction benchmark in autonomous driving. https://github.com/OpenDriveLab/OpenScene, 2023."
+    },
+    {
+      "id": "R05",
+      "section": "References",
+      "page": 12,
+      "content": "Towards learning-based planning: The nuPlan benchmark for real-world autonomous driving."
+    },
+    {
+      "id": "R06",
+      "section": "References",
+      "page": 11,
+      "content": "Parting with misconceptions about learning-based vehicle motion planning."
+    },
+    {
+      "id": "R07",
+      "section": "References",
+      "page": 11,
+      "content": "CARLA: An open urban driving simulator."
+    },
+    {
+      "id": "R08",
+      "section": "References",
+      "page": 12,
+      "content": "Hydra-mdp: End-to-end multimodal planning with multi-target hydra-distillation."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "TransFuser: Imitation with transformer-based sensor fusion for autonomous driving",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "论文在 NAVSIM 中重实现并评测 TransFuser，作为端到端驾驶基线。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "R01",
+        "E06",
+        "E30"
+      ]
+    },
+    {
+      "title": "Planning-oriented autonomous driving",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "对应正文的 UniAD，在 NAVSIM 中重实现并与其他传感器驾驶方法比较。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "R02",
+        "E06",
+        "E32"
+      ]
+    },
+    {
+      "title": "Para-drive: Parallelized architecture for real-time autonomous driving",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "作为 NAVSIM 的端到端基线，论文比较其评分与训练计算需求。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "R03",
+        "E06",
+        "E30",
+        "E33"
+      ]
+    },
+    {
+      "title": "Openscene: The largest up-to-date 3d occupancy prediction benchmark in autonomous driving",
+      "paper_id": null,
+      "relation_type": "uses_dataset",
+      "description": "NAVSIM 基于 OpenScene 构建本文的标准训练与评测划分。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "https://github.com/OpenDriveLab/OpenScene",
+      "evidence_ids": [
+        "R04",
+        "E18",
+        "E19"
+      ]
+    },
+    {
+      "title": "Towards learning-based planning: The nuPlan benchmark for real-world autonomous driving",
+      "paper_id": null,
+      "relation_type": "uses_benchmark",
+      "description": "使用 nuPlan 仿真器及其 OLS、CLS，研究 PDMS 与闭环表现的对齐程度。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "R05",
+        "E50",
+        "E27"
+      ]
+    },
+    {
+      "title": "Parting with misconceptions about learning-based vehicle motion planning",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "NAVSIM 的 PDMS 采用该文 Predictive Driver Model 的轨迹评分函数。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "R06",
+        "E13"
+      ]
+    },
+    {
+      "title": "CARLA: An open urban driving simulator",
+      "paper_id": null,
+      "relation_type": "related",
+      "description": "论文讨论图形闭环仿真，并建议将 CARLA 作为 NAVSIM 的互补评测。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "R07",
+        "E51"
+      ]
+    },
+    {
+      "title": "Hydra-mdp: End-to-end multimodal planning with multi-target hydra-distillation",
+      "paper_id": null,
+      "relation_type": "related",
+      "description": "作为 2024 挑战获胜方法，在 NAVSIM 1.1 排行榜中报告单训练种子成绩。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "R08",
+        "E37",
+        "E38"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F1",
+      "caption": "Figure 1: NAVSIM. Traditional metrics such as the average displacement error (ADE) overlook the multi-modality of driving. They penalize trajectories that deviate from a recorded human driving log, even if such a trajectory is safe. Our benchmark evaluates trajectory outputs of sensor-based driving policies with simulation-based metrics, considering collisions and map compliance.",
+      "description": "概念示意图：左侧街景叠加橙、绿、红三条候选轨迹；右侧以 Human 和三个车辆位姿示意对照 ADE、On Road、No Collision。可直接看到绿色轨迹同时满足道路与无碰撞条件，橙色轨迹未满足道路条件，红色轨迹未满足无碰撞条件；安全的绿色轨迹仍有非零 ADE。作者借此说明单纯匹配人工记录难以衡量驾驶的多种合理解，突出 NAVSIM 结合道路合规与碰撞后果的核心评估思想。",
+      "page": 2,
+      "path": "/paper-assets/navsim-2024/f1.webp",
+      "type": "concept_overview"
+    }
+  ],
+  "tags": [
+    "NAVSIM",
+    "OpenScene",
+    "PDMS",
+    "nuPlan",
+    "真实传感器数据",
+    "端到端驾驶",
+    "自动驾驶",
+    "运动规划",
+    "非反应式仿真",
+    "驾驶评测"
+  ],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T12:20:14+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.1",
+    "source_hash": "d3bc66d321cfceccc4f431113dea3f0f481d74d29dd283a33e204a4326f0403c",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

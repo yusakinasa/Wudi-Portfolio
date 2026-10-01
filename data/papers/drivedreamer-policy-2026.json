@@ -1,0 +1,835 @@
+{
+  "schema_version": "1.0",
+  "id": "drivedreamer-policy-2026",
+  "metadata": {
+    "title": "DriveDreamer-Policy: A Geometry-Grounded World–Action Model for Unified Generation and Planning",
+    "short_title": "DriveDreamer-Policy",
+    "authors": [
+      "Yang Zhou",
+      "Xiaofeng Wang",
+      "Hao Shao",
+      "Letian Wang",
+      "Guosheng Zhao",
+      "Jiangnan Shao",
+      "Jiagang Zhu",
+      "Tingdong Yu",
+      "Zheng Zhu",
+      "Guan Huang",
+      "Steven L. Waslander"
+    ],
+    "year": 2026,
+    "venue": "not explicitly stated",
+    "doi": "",
+    "arxiv_id": "2604.01765",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "https://drivedreamer-policy.github.io/",
+    "code_url": "",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "论文提出用于自动驾驶的 DriveDreamer-Policy，将当前场景深度生成、未来视频生成与运动规划统一到模块化世界–动作模型中。LLM 编码语言指令、多视角图像和当前动作，通过固定大小的查询接口为三个生成专家提供条件；深度、视频和动作查询按因果顺序传递上下文。模型在 Navsim v1 和 v2 分别取得 89.2 PDMS 与 88.7 EPDMS，生成质量比较及消融实验支持深度学习与未来视频学习的互补作用。",
+    "one_sentence": "DriveDreamer-Policy 通过具有深度→视频→动作因果顺序的 LLM 查询嵌入，连接三个生成专家，统一自动驾驶的几何建模、未来视频生成与轨迹规划。",
+    "research_problem": "如何在统一世界–动作模型中加入显式几何学习，使未来预测与动作规划同时受益于场景结构，并保持生成模块的可独立调用性。",
+    "motivation": "现有世界–动作模型常以图像、视频或潜变量预测为世界表示，缺少显式几何约束；论文认为深度可以提供与距离、遮挡和可行驶空间相关的紧凑几何支架。",
+    "core_idea": "在 LLM 中追加深度、视频和动作三组可学习查询，使用结构化因果注意力使视频查询读取深度上下文、动作查询读取深度和视频上下文，再以对应嵌入条件化独立生成专家。",
+    "method_summary": "输入经过文本、视觉和动作编码后进入 LLM；深度专家在像素空间生成当前深度，视频专家结合 VAE 潜变量、CLIP 图像条件和世界视频嵌入生成未来视频，动作专家从噪声轨迹生成未来动作。三个任务采用单阶段联合训练，规划时可仅运行动作专家。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E07",
+      "E08",
+      "E10",
+      "E11",
+      "E12",
+      "E13"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "以固定查询接口连接 LLM 与模块化生成专家",
+      "description": "提出统一驾驶世界–动作架构，由 LLM 提供紧凑上下文表示，分别连接深度、视频和动作生成专家；动作专家能够独立用于规划。",
+      "evidence_ids": [
+        "E01",
+        "E05",
+        "E13"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "显式深度学习与深度→视频→动作条件化",
+      "description": "加入像素空间深度生成模块，并在 LLM 查询组之间设置因果注意力，使几何上下文先进入视频查询，再与未来场景上下文共同进入动作查询。",
+      "evidence_ids": [
+        "E07",
+        "E09",
+        "E10"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "联合评估规划与世界生成，并验证模态互补性",
+      "description": "在 Navsim 上同时评估规划、视频和深度生成，报告规划及部分生成指标优于所比较基线，并通过消融分析深度与视频学习对规划和未来预测的作用。",
+      "evidence_ids": [
+        "E02",
+        "E25",
+        "E26",
+        "E27",
+        "E28",
+        "E29",
+        "E30",
+        "E31"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "自然语言驾驶指令",
+      "同步多视角 RGB 图像",
+      "当前动作上下文",
+      "固定大小的可学习深度、视频和动作查询",
+      "训练时由 Depth Anything 3 提供的深度标签、记录的未来 RGB 帧和轨迹目标"
+    ],
+    "outputs": [
+      "当前场景单目深度图",
+      "动作条件化的未来视频",
+      "以位置和朝向表示的未来动作轨迹"
+    ],
+    "components": [
+      {
+        "name": "多模态输入与查询接口",
+        "description": "语言转为文本 token，各相机图像转为视觉 patch token，当前动作由轻量动作编码器编码；随后按深度、视频、动作顺序追加查询。默认查询数为 64、64、8。",
+        "evidence_ids": [
+          "E06",
+          "E22",
+          "E33"
+        ]
+      },
+      {
+        "name": "LLM 世界理解与因果查询嵌入",
+        "description": "采用 Qwen3-VL-2B 处理多模态输入。结构化注意力允许视频查询读取深度上下文，动作查询读取深度与视频上下文，在单次前向处理中形成模态间的信息流。",
+        "evidence_ids": [
+          "E07",
+          "E15"
+        ]
+      },
+      {
+        "name": "深度生成专家",
+        "description": "采用从 PPD 初始化的像素空间扩散 Transformer，以流匹配训练。训练时将加噪深度与对应 RGB 图像拼接，并通过交叉注意力使用 LLM 深度查询嵌入作为条件。",
+        "evidence_ids": [
+          "E09",
+          "E10",
+          "E16",
+          "E34"
+        ]
+      },
+      {
+        "name": "视频生成专家",
+        "description": "从 Wan-2.1-T2V-1.3B 初始化并适配图像到视频任务。当前 RGB 图像经 VAE 编码；视频查询嵌入与 CLIP 图像条件拼接，为视频去噪器提供条件，最终解码未来视频。",
+        "evidence_ids": [
+          "E08",
+          "E11",
+          "E12",
+          "E17"
+        ]
+      },
+      {
+        "name": "动作生成专家",
+        "description": "独立扩散 Transformer 以 LLM 动作查询嵌入为交叉注意力条件，从噪声轨迹生成未来动作。每个轨迹状态表示为 (x, y, cos θ, sin θ)，无需先显式生成深度或视频。",
+        "evidence_ids": [
+          "E13",
+          "E14",
+          "E35"
+        ]
+      },
+      {
+        "name": "单阶段多任务训练",
+        "description": "联合优化深度、视频和轨迹损失，深度损失权重为 0.1，其余默认权重为 1.0。深度标签来自 Depth Anything 3；深度先取对数，再按每张图的分位数归一化。",
+        "evidence_ids": [
+          "E19",
+          "E20",
+          "E21",
+          "E36"
+        ]
+      }
+    ],
+    "pipeline": [
+      "编码语言指令、多视角图像和当前动作，并追加深度、视频、动作查询。",
+      "LLM 按结构化因果注意力生成各查询组的上下文嵌入。",
+      "深度查询嵌入条件化像素空间深度生成器。",
+      "视频查询嵌入与 CLIP 图像条件共同条件化潜空间视频生成器。",
+      "动作查询嵌入条件化轨迹生成器，输出未来位置与朝向。",
+      "根据运行模式调用动作专家，或同时调用深度和视频专家进行世界生成。"
+    ],
+    "details": "深度与视频训练分辨率为 144 × 256，视频训练时域为 9 帧。模型在 8 NVIDIA H20 GPUs 上训练 100k 步，batch size 为 32；默认使用 64 个深度查询、64 个视频查询和 8 个动作查询。深度归一化范围为 [-0.5, 0.5]。训练使用 Navsim 数据，除初始化骨干外不增加额外数据集或预训练。深度→视频→动作依赖发生在查询上下文层，动作生成器可独立运行。",
+    "evidence_ids": [
+      "E06",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E17",
+      "E18",
+      "E19",
+      "E20",
+      "E21",
+      "E22",
+      "E23",
+      "E24",
+      "E32",
+      "E33",
+      "E34",
+      "E35",
+      "E36"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "Navsim：navtrain 训练划分与 navtest 测试划分，分别包含 100k 和 12k 样本，采样频率为 2Hz",
+      "视频评估目标为记录的未来 RGB 帧",
+      "深度训练与评估目标均由 Depth Anything 3 提供"
+    ],
+    "benchmarks": [
+      "Navsim v1",
+      "Navsim v2"
+    ],
+    "metrics": [
+      "PDMS",
+      "EPDMS",
+      "NC",
+      "DAC",
+      "TTC",
+      "C",
+      "EP",
+      "DDC",
+      "TLC",
+      "LK",
+      "HC",
+      "EC",
+      "LPIPS",
+      "PSNR",
+      "FVD",
+      "AbsRel",
+      "δ1",
+      "δ2",
+      "δ3"
+    ],
+    "baselines": [
+      "TransFuser",
+      "UniAD",
+      "PARA-Drive",
+      "DiffusionDrive",
+      "AutoVLA",
+      "Recogdrive",
+      "DriveVLA-W0",
+      "LAW",
+      "DrivingGPT",
+      "WoTE",
+      "Epona",
+      "FSDrive",
+      "PWM",
+      "Drivesuprim",
+      "ARTEMIS",
+      "PPD",
+      "PPD-Fintuned"
+    ],
+    "main_results": [
+      {
+        "text": "Navsim v1 的 PDMS 为 89.2，Navsim v2 的 EPDMS 为 88.7；论文报告优于所比较的方法。",
+        "evidence_ids": [
+          "E02",
+          "E37"
+        ]
+      },
+      {
+        "text": "与 PWM 的前视角视频比较中，模型 LPIPS 为 0.20、FVD 为 53.59，分别优于 PWM 的 0.23 和 85.95；PSNR 为 21.05，低于 PWM 的 21.57，因此各视频指标并非一致改善。",
+        "evidence_ids": [
+          "E25",
+          "E26",
+          "E38"
+        ]
+      },
+      {
+        "text": "深度评估以 DA3 输出为目标：模型 AbsRel 为 8.1，δ1/δ2/δ3 为 92.8/98.6/99.5；微调 PPD 对应为 9.3 和 91.4/98.3/99.5，零样本 PPD 对应为 18.5 和 80.4/94.0/97.2。",
+        "evidence_ids": [
+          "E27",
+          "E28",
+          "E29",
+          "E39"
+        ]
+      },
+      {
+        "text": "在相同训练预算下，动作单任务、深度+动作、视频+动作及完整模型的比较表明，世界学习改善规划，而联合深度与视频学习获得最大规划收益。",
+        "evidence_ids": [
+          "E30",
+          "E40"
+        ]
+      },
+      {
+        "text": "在相同数据和计算预算下，联合深度学习并让视频查询因果读取深度查询，改善了未来视频生成准确性。",
+        "evidence_ids": [
+          "E31",
+          "E41"
+        ]
+      },
+      {
+        "text": "将查询预算从 32 个深度、32 个视频、4 个动作查询增加到默认的 64、64、8，整体改善规划和世界生成表现。",
+        "evidence_ids": [
+          "E42",
+          "E43"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E02",
+      "E23",
+      "E24",
+      "E25",
+      "E26",
+      "E27",
+      "E28",
+      "E29",
+      "E30",
+      "E31",
+      "E32",
+      "E37",
+      "E38",
+      "E39",
+      "E40",
+      "E41",
+      "E42",
+      "E43",
+      "E44",
+      "E45",
+      "E46",
+      "E47"
+    ]
+  },
+  "limitations": [],
+  "interpretation": {
+    "summary": "AI 解读：核心设计是几何监督与查询上下文的顺序组织，而不是把生成出的深度图和视频逐级送入规划器。现有消融支持深度与视频辅助学习具有互补作用，但尚不能单独确定收益来自因果注意力顺序还是额外监督。深度训练和评估均使用 DA3 目标，因此其结果对独立真实几何准确性的支持仍有限。视频比较中的 PSNR 下降也表明生成质量改善需要按指标分别理解。提供的文本没有明确列出作者自述局限，故 limitations 留空。",
+    "open_questions": [
+      "固定联合任务和查询预算后，改变或取消深度→视频→动作注意力顺序，会如何影响结果？",
+      "使用独立传感器深度或其他几何参考评估时，深度生成的收益是否保持？",
+      "仅规划、带世界生成的规划和完整生成三种模式的实际延迟与资源消耗分别如何？",
+      "未来视频生成与轨迹之间的动作一致性，应如何独立于视觉质量进行验证？",
+      "更长预测时域、跨数据集场景和罕见危险情境下，几何辅助学习的收益是否稳定？",
+      "按每张图分位数归一化后，推理时恢复度量深度需要哪些尺度信息？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "Abstract",
+      "page": 1,
+      "content": "integrates depth generation, future video generation, and motion planning within a single modular architecture."
+    },
+    {
+      "id": "E02",
+      "section": "Abstract",
+      "page": 1,
+      "content": "our model reaches 89.2 PDMS on Navsim v1 and 88.7 EPDMS on Navsim v2"
+    },
+    {
+      "id": "E03",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "image/video prediction or latent rollouts without explicit geometric grounding"
+    },
+    {
+      "id": "E04",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "depth is compact, directly tied to geometry, and can serve as an explicit scaffold"
+    },
+    {
+      "id": "E05",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "combines an LLM with generative experts connected through a fixed size query interface, enabling practical compute control."
+    },
+    {
+      "id": "E06",
+      "section": "3.2.1. World Understanding",
+      "page": 4,
+      "content": "we append three fixed-size groups of learnable query tokens—depth queries, video queries, and action queries—in that order."
+    },
+    {
+      "id": "E07",
+      "section": "3.2.1. World Understanding",
+      "page": 5,
+      "content": "video queries can attend to depth context, and action queries can attend to both depth and video context."
+    },
+    {
+      "id": "E08",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 5,
+      "content": "Given the current RGB images, we first encode them into a compact latent representation using a VAE"
+    },
+    {
+      "id": "E09",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 5,
+      "content": "our depth generator is a pixel-space diffusion transformer trained with a standard flow-matching objective."
+    },
+    {
+      "id": "E10",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 5,
+      "content": "we condition the depth denoiser on the LLM world depth embeddings through cross-attention"
+    },
+    {
+      "id": "E11",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 6,
+      "content": "we condition it on the LLM world video embeddings produced by the video query tokens."
+    },
+    {
+      "id": "E12",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 6,
+      "content": "using a CLIP (Radford et al., 2021) model and inject it into the denoiser as an explicit conditioning signal"
+    },
+    {
+      "id": "E13",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 6,
+      "content": "Since the action generator does not depend on explicit depth and video generation, it can be activated independently for planning"
+    },
+    {
+      "id": "E14",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 6,
+      "content": "namely $( x , y ,$ cos 𝜃, sin 𝜃)"
+    },
+    {
+      "id": "E15",
+      "section": "3.3. Training Details",
+      "page": 6,
+      "content": "we use Qwen3-VL-2B (Bai et al., 2025) to process and understand multimodal inputs."
+    },
+    {
+      "id": "E16",
+      "section": "3.3. Training Details",
+      "page": 6,
+      "content": "For the depth generator, we initialize our model from PPD (Xu et al., 2025)."
+    },
+    {
+      "id": "E17",
+      "section": "3.3. Training Details",
+      "page": 6,
+      "content": "we initialize the model from Wan-2.1-T2V-1.3B (Wan et al., 2025) and adapt it to the image-to-video task."
+    },
+    {
+      "id": "E18",
+      "section": "3.3. Training Details",
+      "page": 6,
+      "content": "a spatial resolution of 144 × 256 to reduce computational and memory costs. The video training horizon is 9 frames."
+    },
+    {
+      "id": "E19",
+      "section": "3.3. Training Details",
+      "page": 6,
+      "content": "We train all components in a single stage with a joint multi-task loss:"
+    },
+    {
+      "id": "E20",
+      "section": "3.3. Training Details",
+      "page": 6,
+      "content": "We use $\\lambda _ { d } = 0 .$ 1 and set the remaining hyperparameters to 1.0 by default."
+    },
+    {
+      "id": "E21",
+      "section": "3.3. Training Details",
+      "page": 6,
+      "content": "The depth label used in training is obtained from an off-the-shelf depth foundation model, Depth Anything 3 (DA3) (Lin et al., 2025)."
+    },
+    {
+      "id": "E22",
+      "section": "4.1. Experimental Setup",
+      "page": 8,
+      "content": "64 depth-query tokens, 64 video-query tokens, and 8 action-query tokens"
+    },
+    {
+      "id": "E23",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "navtrain split and evaluate on the navtest split, which contains 100k and 12k data samples sampled at 2Hz, respectively."
+    },
+    {
+      "id": "E24",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "using the predictive driver model score (PDMS) on v1 and the extended PDMS (EPDMS) on v2."
+    },
+    {
+      "id": "E25",
+      "section": "4.1. Experimental Setup, Table 3(a)",
+      "page": 7,
+      "content": "| DriveDreamer-Policy (Ours) | - | 0.20 | 21.05 | 53.59 |"
+    },
+    {
+      "id": "E26",
+      "section": "4.1. Experimental Setup, Table 3(a)",
+      "page": 7,
+      "content": "| PWM (Zhao et al., 2025) | NeurIPS'25 | 0.23 | 21.57 | 85.95 |"
+    },
+    {
+      "id": "E27",
+      "section": "4.1. Experimental Setup, Table 3(b)",
+      "page": 7,
+      "content": "| DriveDreamer-Policy (Ours) | - | 8.1 | 92.8 | 98.6 | 99.5 |"
+    },
+    {
+      "id": "E28",
+      "section": "4.1. Experimental Setup, Table 3(b)",
+      "page": 7,
+      "content": "| PPD-Fintuned | NeurIPS'25 | 9.3 | 91.4 | 98.3 | 99.5 |"
+    },
+    {
+      "id": "E29",
+      "section": "4.1. Experimental Setup, Table 3(b)",
+      "page": 7,
+      "content": "| PPD (Xu et al., 2025) | NeurIPS'25 | 18.5 | 80.4 | 94.0 | 97.2 |"
+    },
+    {
+      "id": "E30",
+      "section": "4.2. Quantitative Results",
+      "page": 10,
+      "content": "Joint world training, leveraging both depth geometry and video temporal evolution, achieves the largest performance gains"
+    },
+    {
+      "id": "E31",
+      "section": "4.2. Quantitative Results",
+      "page": 10,
+      "content": "Joint learning with depth improves video generation accuracy, indicating that depth provides an effective 3D scaffold for coherent future prediction."
+    },
+    {
+      "id": "E32",
+      "section": "4.1. Experimental Setup",
+      "page": 8,
+      "content": "We train DriveDreamer-Policy in a single stage for 100k steps with a batch size of 32 on 8 NVIDIA H20 GPUs"
+    },
+    {
+      "id": "E33",
+      "section": "4.1. Experimental Setup",
+      "page": 8,
+      "content": "We implement the action encoder as a 2-layer MLP with layer normalization"
+    },
+    {
+      "id": "E34",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 5,
+      "content": "the denoiser takes as input the concatenation of the noisy depth and the corresponding RGB image"
+    },
+    {
+      "id": "E35",
+      "section": "3.2.2. World and Action Prediction",
+      "page": 6,
+      "content": "the action generator is implemented as a standalone diffusion transformer that maps a noise trajectory to a feasible future action sequence."
+    },
+    {
+      "id": "E36",
+      "section": "3.3. Training Details",
+      "page": 6,
+      "content": "we first apply a log transform and then compute per-map percentiles to normalize to the range [-0.5, 0.5]."
+    },
+    {
+      "id": "E37",
+      "section": "4.2. Quantitative Results",
+      "page": 8,
+      "content": "Our DriveDreamer-Policy outperforms all considered methods"
+    },
+    {
+      "id": "E38",
+      "section": "4.2. Quantitative Results",
+      "page": 9,
+      "content": "Since PWM supports only single-view generation, we evaluate the single-view (front) quality for a fair and convenient comparison."
+    },
+    {
+      "id": "E39",
+      "section": "4.1. Experimental Setup",
+      "page": 7,
+      "content": "Depth is evaluated using dense depth targets provided by DA3, which are also used for training."
+    },
+    {
+      "id": "E40",
+      "section": "4.2. Quantitative Results",
+      "page": 10,
+      "content": "All world training strategies effectively improve planning performance compared to training from scratch."
+    },
+    {
+      "id": "E41",
+      "section": "4.2. Quantitative Results",
+      "page": 10,
+      "content": "comparing two variants under the same training data and compute budget"
+    },
+    {
+      "id": "E42",
+      "section": "4.3. Ablation Studies",
+      "page": 11,
+      "content": "the default setting (64 depth + 64 video + 8 action query tokens) against smaller budgets"
+    },
+    {
+      "id": "E43",
+      "section": "4.3. Ablation Studies",
+      "page": 11,
+      "content": "increasing the query budget generally improves both planning and world-generation performance"
+    },
+    {
+      "id": "E44",
+      "section": "4.1. Experimental Setup",
+      "page": 8,
+      "content": "All baselines are reported under their official Navsim performance."
+    },
+    {
+      "id": "E45",
+      "section": "4.1. Experimental Setup",
+      "page": 8,
+      "content": "We use Navsim training data, without additional datasets or extra pre-training beyond the initialized backbones."
+    },
+    {
+      "id": "E46",
+      "section": "4.1. Experimental Setup, Tables 1–2",
+      "page": 7,
+      "content": "<td>NC↑</td><td>DAC↑</td><td>DDC↑</td><td>TLC↑</td><td>EP↑</td><td>TTC↑</td><td>LK↑</td><td>HC↑</td><td>EC↑</td><td>EPDMS↑</td>"
+    },
+    {
+      "id": "E47",
+      "section": "4.1. Experimental Setup, Table 1",
+      "page": 7,
+      "content": "<td>NC↑</td><td>DAC↑</td><td>TTC↑</td><td>C↑</td><td>EP↑</td><td>PDMS↑</td>"
+    },
+    {
+      "id": "E48",
+      "section": "References",
+      "page": 13,
+      "content": "From forecasting to planning: Policy world model for collaborative state-action prediction, 2025."
+    },
+    {
+      "id": "E49",
+      "section": "References",
+      "page": 13,
+      "content": "Pixel-perfect depth with semantics-prompted diffusion transformers, 2025."
+    },
+    {
+      "id": "E50",
+      "section": "References",
+      "page": 13,
+      "content": "Depth anything 3: Recovering the visual space from any views, 2025."
+    },
+    {
+      "id": "E51",
+      "section": "References",
+      "page": 15,
+      "content": "Wan: Open and advanced large-scale video generative models, 2025."
+    },
+    {
+      "id": "E52",
+      "section": "References",
+      "page": 16,
+      "content": "Qwen3-vl technical report, 2025."
+    },
+    {
+      "id": "E53",
+      "section": "References",
+      "page": 14,
+      "content": "Navsim: Datadriven non-reactive autonomous vehicle simulation and benchmarking, 2024."
+    },
+    {
+      "id": "E54",
+      "section": "References",
+      "page": 14,
+      "content": "Pseudo-simulation for autonomous driving, 2025."
+    },
+    {
+      "id": "E55",
+      "section": "3.1. Preliminaries",
+      "page": 4,
+      "content": "We use conditional flow matching (Lipman et al., 2023) as the training principle for our generative experts when predicting continuous targets."
+    },
+    {
+      "id": "E56",
+      "section": "References",
+      "page": 15,
+      "content": "Flow matching for generative modeling, 2023."
+    },
+    {
+      "id": "E57",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "We train and evaluate our method on the Navsim benchmark (Dauner et al., 2024; Cao et al., 2025)"
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "From forecasting to planning: Policy world model for collaborative state-action prediction",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "PWM 是规划比较基线，也是前视角未来视频质量的直接比较对象。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2510.19654",
+      "url": "https://arxiv.org/abs/2510.19654",
+      "evidence_ids": [
+        "E26",
+        "E38",
+        "E48"
+      ]
+    },
+    {
+      "title": "Pixel-perfect depth with semantics-prompted diffusion transformers",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "深度生成器从 PPD 初始化；实验另比较零样本和 Navsim 微调的 PPD。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2510.07316",
+      "url": "https://arxiv.org/abs/2510.07316",
+      "evidence_ids": [
+        "E16",
+        "E28",
+        "E29",
+        "E49"
+      ]
+    },
+    {
+      "title": "Depth anything 3: Recovering the visual space from any views",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "Depth Anything 3 提供深度训练标签与深度评估目标。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2511.10647",
+      "url": "https://arxiv.org/abs/2511.10647",
+      "evidence_ids": [
+        "E21",
+        "E39",
+        "E50"
+      ]
+    },
+    {
+      "title": "Wan: Open and advanced large-scale video generative models",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "视频生成器从 Wan-2.1-T2V-1.3B 初始化，并适配图像到视频任务。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2503.20314",
+      "url": "https://arxiv.org/abs/2503.20314",
+      "evidence_ids": [
+        "E17",
+        "E51"
+      ]
+    },
+    {
+      "title": "Qwen3-vl technical report",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "Qwen3-VL-2B 用作多模态理解骨干。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2511.21631",
+      "url": "https://arxiv.org/abs/2511.21631",
+      "evidence_ids": [
+        "E15",
+        "E52"
+      ]
+    },
+    {
+      "title": "Navsim: Datadriven non-reactive autonomous vehicle simulation and benchmarking",
+      "paper_id": null,
+      "relation_type": "uses_benchmark",
+      "description": "论文使用 Navsim 训练与评估协议，并报告 v1 的 PDMS。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2406.15349",
+      "url": "https://arxiv.org/abs/2406.15349",
+      "evidence_ids": [
+        "E24",
+        "E53",
+        "E57"
+      ]
+    },
+    {
+      "title": "Pseudo-simulation for autonomous driving",
+      "paper_id": "pseudo-simulation-for-autonomous-driving-2025",
+      "relation_type": "uses_benchmark",
+      "description": "论文将 Cao et al., 2025 作为 Navsim v2 的来源引用，并报告 EPDMS。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2506.04218",
+      "url": "https://arxiv.org/abs/2506.04218",
+      "evidence_ids": [
+        "E24",
+        "E54",
+        "E57"
+      ]
+    },
+    {
+      "title": "Flow matching for generative modeling",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "连续目标生成专家采用条件流匹配作为训练原则。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2210.02747",
+      "url": "https://arxiv.org/abs/2210.02747",
+      "evidence_ids": [
+        "E55",
+        "E56"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F2",
+      "caption": "Figure 2: Overview of our DriveDreamer-Policy pipeline. The large language model takes the language instruction, multi-view images and current action, along with a set of learnable queries as inputs to reason and generate world and action embeddings. The generated embeddings are then passed into our three generative expert models as cross-attention conditions to generate depth, future images, and future action.",
+      "description": "整体架构图。下方语言、多视角图像和当前动作分别经 Text Tokenizer、Vision Encoder、Action Encoder 输入中央 LLM，Depth Queries、Video Queries 和 Action Queries 也输入 LLM。上方包含三个分支：Depth Generator 将图像与加噪深度拼接后送入 Diffusion Transformer，输出 Current Depth，GT 加噪路径标为 Training Only；Video Generator 将图像经 VAE 编码，并使用与 World Embeddings 拼接的 CLIP 条件及 Noised Latents，经扩散与 VAE 解码输出 Future Video；Action Generator 接收 Noise 和 Action Embeddings，输出 Future Action。可见箭头展示嵌入分别条件化生成专家；正文将深度→视频→动作依赖定义在 LLM 查询上下文层。该图直接说明论文的固定查询接口与三专家模块化设计。",
+      "page": 5,
+      "path": "/paper-assets/drivedreamer-policy-2026/f2.webp",
+      "type": "architecture"
+    },
+    {
+      "id": "F1",
+      "caption": "Figure 1: Comparison of our DriveDreamer-Policy with existing models. Items with dashed lines are optional. Vision-based and VLA planners directly map observations (and optional inputs) to actions without explicitly predicting the future world. World models generate future observations but often rely on external action signals. Recent world–action models unify future world generation and planning, but typically operate on image/video representations. DriveDreamer-Policy extends this line by explicitly generating depth alongside video and actions, enabling geometry-grounded imagination and planning within a unified model.",
+      "description": "概念定位图，依次展示 Vision-based Planner、VLA Planner、World Model、World-Action Model (2D) 和 World-Action Model (3D+2D) 五类框架。各框架以底部输入、中央模型和顶部输出组织，虚线框按图注表示可选项。最右侧 DriveDreamer-Policy 接收 Language、Image、Action，同时输出 Depth、Video、Action；相较前一类 World-Action Model (2D)，增加了 Depth 输出。该图清楚呈现作者以显式几何生成扩展统一世界生成与规划的核心定位。",
+      "page": 2,
+      "path": "/paper-assets/drivedreamer-policy-2026/f1.webp",
+      "type": "concept_overview"
+    }
+  ],
+  "tags": [
+    "Navsim",
+    "世界–动作模型",
+    "几何条件化",
+    "流匹配",
+    "深度生成",
+    "自动驾驶",
+    "视觉语言动作模型",
+    "视频生成",
+    "运动规划"
+  ],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T12:01:59+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.1",
+    "source_hash": "3ff851e73e9a647a8cb8ffe764b6a58d8c9a2d845e54497e0f371a492cd63fd4",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

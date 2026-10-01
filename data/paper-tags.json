@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "tags": [
+    {
+      "id": "t-2e347c19b86c47288bb6b15e7815e4f9",
+      "name": "benchmark"
+    },
+    {
+      "id": "t-60f0dac038da413fbaab343e76301978",
+      "name": "自动驾驶"
+    }
+  ],
+  "papers": {
+    "navsim-2024": [
+      "t-2e347c19b86c47288bb6b15e7815e4f9",
+      "t-60f0dac038da413fbaab343e76301978"
+    ]
+  }
+}

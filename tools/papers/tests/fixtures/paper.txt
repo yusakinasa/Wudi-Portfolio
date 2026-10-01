@@ -1,0 +1,17 @@
+Fixture Study: A Synthetic Paper for Pipeline Testing
+Example Author, 2026
+
+Abstract
+This synthetic document tests a page-aware paper ingestion pipeline.
+
+Method
+The parser reads PDF text blocks and generates structured JSON.
+
+Experiments
+The only dataset is a synthetic fixture.
+
+Limitations
+This fixture is not a scientific publication.
+
+References
+[1] Companion Fixture Study. Example Author. 2025.

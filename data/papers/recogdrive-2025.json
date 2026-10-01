@@ -1,0 +1,911 @@
+{
+  "schema_version": "1.0",
+  "id": "recogdrive-2025",
+  "metadata": {
+    "title": "RECOGDRIVE: A REINFORCED COGNITIVE FRAMEWORK FOR END-TO-END AUTONOMOUS DRIVING",
+    "short_title": "ReCogDrive",
+    "authors": [
+      "Yongkang Li",
+      "Kaixin Xiong",
+      "Xiangyu Guo",
+      "Fang Li",
+      "Sixu Yan",
+      "Gangwei Xu",
+      "Lijun Zhou",
+      "Long Chen",
+      "Haiyang Sun",
+      "Bing Wang",
+      "Kun Ma",
+      "Guang Chen",
+      "Hangjun Ye",
+      "Wenyu Liu",
+      "Xinggang Wang"
+    ],
+    "year": 2025,
+    "venue": "Preprint",
+    "doi": "",
+    "arxiv_id": "2506.08052v2",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "https://huggingface.co/collections/owl10/recogdrive-68bafa143de172bab8de5752",
+    "code_url": "https://github.com/xiaomi-research/recogdrive",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "ReCogDrive 将视觉语言模型与扩散规划器结合，用于端到端自动驾驶。论文针对通用视觉语言模型的驾驶知识不足、文本轨迹与连续动作空间不匹配，以及模仿学习策略受限的问题，提出分层驾驶问答数据流水线、认知引导的扩散规划器和 DiffGRPO 强化学习阶段。模型以视觉语言模型的隐状态指导连续轨迹去噪，并通过仿真奖励优化规划行为。作者在 NAVSIM、Bench2Drive 及驾驶问答基准上报告了性能提升。",
+    "one_sentence": "ReCogDrive 通过驾驶问答预训练、认知 token 引导的扩散规划和仿真驱动的 DiffGRPO，将视觉语言模型的驾驶先验转化为连续轨迹。",
+    "research_problem": "如何在端到端自动驾驶中连接视觉语言模型的场景理解与连续动作规划，同时缓解驾驶领域知识差距和模仿学习策略的局限。",
+    "motivation": "通用互联网预训练缺少细致驾驶知识；离散文本空间与连续轨迹空间不匹配，可能产生不可行轨迹和格式错误；仅依赖专家模仿难以探索更优驾驶行为。",
+    "core_idea": "用分层问答数据形成驾驶认知先验，将 VLM 隐状态作为扩散规划条件，再用仿真奖励和组内相对优势优化扩散策略。",
+    "method_summary": "训练分为驾驶预训练、模仿学习和强化学习三阶段。VLM 编码图像与文本查询；扩散规划器融合认知 token、历史轨迹及自车状态；DiffGRPO 对多条采样轨迹评分并更新规划器。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E13",
+      "E14",
+      "E19",
+      "E20",
+      "E30",
+      "E32"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "可扩展的分层驾驶问答数据流水线",
+      "description": "通过生成、精炼和质量控制构建驾驶认知数据，覆盖基础感知、动态理解、规划与推理以及高级推理四个层级。",
+      "evidence_ids": [
+        "E05",
+        "E06",
+        "E07",
+        "E08",
+        "E09",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "认知引导的扩散规划器",
+      "description": "以 InternVL3 为认知骨干，将其驾驶隐状态作为扩散 Transformer 的条件，并融合历史轨迹和自车状态，生成连续轨迹。",
+      "evidence_ids": [
+        "E01",
+        "E13",
+        "E14",
+        "E15",
+        "E16",
+        "E17",
+        "E18"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "面向扩散规划的 DiffGRPO",
+      "description": "采样多条扩散轨迹，以 NAVSIM 的 PDMS 为奖励计算组内相对优势，结合行为克隆约束优化规划器，探索专家模仿之外的驾驶策略。",
+      "evidence_ids": [
+        "E19",
+        "E20",
+        "E21",
+        "E22",
+        "E23"
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "驾驶规划与问答基准上的实验验证",
+      "description": "在 NAVSIM 报告 PDMS 90.8，在 Bench2Drive 报告场景成功率 45.45% 和 Driving Score 71.36，并比较轨迹生成速度及驾驶问答表现。",
+      "evidence_ids": [
+        "E30",
+        "E32",
+        "E38",
+        "E39",
+        "E40"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "摄像头图像；VLM 支持多视角图像编码",
+      "文本查询及导航指令",
+      "自车状态，如速度、加速度",
+      "历史轨迹"
+    ],
+    "outputs": [
+      "未来轨迹的路点与朝向",
+      "可选的高层驾驶指令与思维链文本"
+    ],
+    "components": [
+      {
+        "name": "Scalable Hierarchical Data Pipeline",
+        "description": "使用 Qwen2.5-VL 生成驾驶标注，并结合传感器和轨迹标签。精炼阶段统一格式、改写和扩展问题模板；质量控制阶段丢弃评分低于 60 的问答对。正文补充材料报告保留 2.3M 高质量问答对，以及在 NAVSIM 上生成的 775K 问答对。",
+        "evidence_ids": [
+          "E09",
+          "E10",
+          "E11",
+          "E12"
+        ]
+      },
+      {
+        "name": "ReCogDrive-VLM",
+        "description": "采用 InternVL3 作为认知骨干，将多视角图像和文本查询编码为隐状态，作为携带驾驶先验的认知 token。对隐状态平均池化形成全局语义条件；高层指令和思维链输出为可选功能。",
+        "evidence_ids": [
+          "E13",
+          "E14",
+          "E15",
+          "E45",
+          "E46"
+        ]
+      },
+      {
+        "name": "Cognition-Guided Diffusion Planner",
+        "description": "基于 DiT，融合带噪动作、历史轨迹与语义先验。注意力模块建模路点关系并注入 VLM 条件，自车状态通过 AdaLN 调制。训练使用 100 个去噪步，推理缩减为 5 步。",
+        "evidence_ids": [
+          "E14",
+          "E16",
+          "E17",
+          "E18",
+          "E27",
+          "E54"
+        ]
+      },
+      {
+        "name": "Diffusion Group Relative Policy Optimization",
+        "description": "将扩散去噪链视为内部决策过程，为同一输入采样多条轨迹，以 PDMS 作为整条轨迹的奖励。优势由组内奖励均值和标准差归一化得到；策略损失沿去噪链累积，并加入参考策略的行为克隆项。论文省略 PPO 式裁剪，每批仅更新一次；折扣作用于去噪步骤。",
+        "evidence_ids": [
+          "E19",
+          "E20",
+          "E21",
+          "E22",
+          "E23"
+        ]
+      }
+    ],
+    "pipeline": [
+      "生成、精炼并筛选分层驾驶问答数据。",
+      "对 VLM 进行 3 个 epoch 的监督微调。",
+      "冻结 VLM，通过 DDPM 和模仿学习训练扩散规划器 200 个 epoch。",
+      "采样轨迹并在 NAVSIM 仿真中评分，通过 DiffGRPO 微调规划器 10 个 epoch。",
+      "推理时编码图像和文本，融合历史轨迹与自车状态，经 5 步去噪输出未来轨迹。"
+    ],
+    "details": "认知 token 通过交叉注意力指导轨迹去噪，平均池化语义提供全局上下文，历史轨迹提供时间一致性条件，自车状态提供物理状态条件。DiffGRPO 使用标准化组优势、沿去噪步骤的折扣和行为克隆正则。作者将显式文本推理保留为可选项，并指出其在 NAVSIM 上没有带来额外收益。",
+    "evidence_ids": [
+      "E04",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E17",
+      "E19",
+      "E20",
+      "E21",
+      "E22",
+      "E23",
+      "E24",
+      "E25",
+      "E26",
+      "E27",
+      "E45",
+      "E46",
+      "E47",
+      "E48",
+      "E54"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "NAVSIM：navtrain 含 1,192 个训练场景，navtest 含 136 个评估场景",
+      "Bench2Drive：基于 CARLA 的 220 条短路线",
+      "DriveLM：驾驶问答训练与评估",
+      "LingoQA：驾驶问答训练",
+      "分层数据流水线构建的驾驶问答数据"
+    ],
+    "benchmarks": [
+      "NAVSIM",
+      "Bench2Drive",
+      "DriveLM",
+      "DriveBench"
+    ],
+    "metrics": [
+      "Predictive Driver Model Score (PDMS)",
+      "NC、DAC、TTC、Comfort、Ego Progress",
+      "Bench2Drive Success Rate、Driving Score、Efficiency、Comfort",
+      "Bench2Drive 多能力测试：Merging、Overtaking、Emergency Brake、GiveWay、Traffic Sign",
+      "DriveLM GPT-Score",
+      "DriveBench 感知、预测、规划、行为及平均分",
+      "轨迹生成耗时与格式错误率"
+    ],
+    "baselines": [
+      "DiffusionDrive",
+      "WoTE",
+      "PARA-Drive",
+      "InternVL3",
+      "QwenVL2.5",
+      "VLM Plain Text",
+      "VLM + MLP",
+      "VLM + Query-based Decoder",
+      "VLM + Vanilla Diffusion",
+      "GPT-4o"
+    ],
+    "main_results": [
+      {
+        "text": "NAVSIM navtest 上，ReCogDrive 的 PDMS 为 90.8。论文报告其仅使用摄像头输入，相比同时使用摄像头和 LiDAR 的 DiffusionDrive、WoTE 分别提高 2.7、2.5 PDMS。",
+        "evidence_ids": [
+          "E30",
+          "E31"
+        ]
+      },
+      {
+        "text": "Bench2Drive 上，场景成功率为 45.45%，Driving Score 为 71.36；作者报告这两项为所比较端到端基线中的最高值。",
+        "evidence_ids": [
+          "E32"
+        ]
+      },
+      {
+        "text": "表 3 的逐步消融显示：轨迹训练基线、加入驾驶预训练、加入扩散规划器、加入 DiffGRPO 的 PDMS 分别为 82.4、84.1、86.5、90.8。",
+        "evidence_ids": [
+          "E33",
+          "E34",
+          "E35",
+          "E36"
+        ]
+      },
+      {
+        "text": "表 3 中，加入 DiffGRPO 后 Ego Progress 从 80.9 升至 87.3，但 NC 从 98.1 降至 97.9；综合 PDMS 提升并不意味着所有安全子指标同时提高。",
+        "evidence_ids": [
+          "E35",
+          "E36"
+        ]
+      },
+      {
+        "text": "表 4 中，文本轨迹生成耗时为 0.5839 秒、PDMS 为 84.1、格式错误率为 0.01%；最终扩散解码配置耗时为 0.0750 秒、PDMS 为 86.5、格式错误率为 0.00%。作者报告约 7.8 倍加速及 2.4 PDMS 提升。",
+        "evidence_ids": [
+          "E37",
+          "E38"
+        ]
+      },
+      {
+        "text": "表 5 中，ReCogDrive 的 DriveLM GPT-Score 为 67.30，DriveBench 平均分为 56.71；GPT-4o 对应为 67.27 和 51.96。ReCogDrive 并未在 DriveBench 的预测、规划和行为各单项上全面超过 GPT-4o。",
+        "evidence_ids": [
+          "E39",
+          "E40"
+        ]
+      },
+      {
+        "text": "作者指出，显式 CoT 引导在 NAVSIM 上没有带来收益，因此将文本引导设为可选。",
+        "evidence_ids": [
+          "E45"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E24",
+      "E25",
+      "E26",
+      "E28",
+      "E29",
+      "E30",
+      "E31",
+      "E32",
+      "E33",
+      "E34",
+      "E35",
+      "E36",
+      "E37",
+      "E38",
+      "E39",
+      "E40",
+      "E45",
+      "E49",
+      "E50",
+      "E51",
+      "E52",
+      "E53"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "作者明确指出，多摄像头输入处理、视频帧序列处理和相对较高的推理延迟仍是局限。",
+      "evidence_ids": [
+        "E41"
+      ]
+    },
+    {
+      "text": "实车部署和评估仍被作者列为后续计划。",
+      "evidence_ids": [
+        "E42"
+      ]
+    },
+    {
+      "text": "失败案例中，模型倾向优先追求自车进度，可能产生激进驾驶。",
+      "evidence_ids": [
+        "E43"
+      ]
+    },
+    {
+      "text": "作者观察到多视角输入在转弯场景中表现不佳，以及因周围车辆行为建模不足而产生不安全跟车距离。",
+      "evidence_ids": [
+        "E44",
+        "E55"
+      ]
+    },
+    {
+      "text": "部分预测轨迹在视觉上接近真实轨迹却仍被判失败，作者据此提出评估指标可能存在假阴性。",
+      "evidence_ids": [
+        "E56"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：主要价值在于用驾驶领域适配后的隐状态连接场景理解和连续规划，并通过仿真奖励改进策略。现有证据更直接支持隐状态条件与规划训练的有效性，尚不足以证明显式语言推理是性能提升的必要因素。综合分数提升同时伴随子指标取舍，不能据此推断真实道路安全性。原文消融基线、数据规模及部分训练超参数存在表文或图文不一致，复现时需要核对。",
+    "open_questions": [
+      "在视觉信息缺失或受扰时，规划器是否主要依赖语言先验而非当前场景？",
+      "更丰富的长尾场景能否验证显式高层指令和 CoT 的额外价值？",
+      "如何调整仿真奖励，使自车进度提升与碰撞风险、跟车距离和舒适性更好地平衡？",
+      "多摄像头、视频输入和实车部署下，性能与延迟能否保持？",
+      "能否提供统一的消融基线、数据统计和训练配置，消除原文内部不一致？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "ABSTRACT",
+      "page": 1,
+      "content": "unifying driving understanding and planning by integrating an autoregressive model with a diffusion planner."
+    },
+    {
+      "id": "E02",
+      "section": "1 INTRODUCTION",
+      "page": 2,
+      "content": "The discrete language space of VLMs fundamentally conflicts with the continuous action space required for planning."
+    },
+    {
+      "id": "E03",
+      "section": "1 INTRODUCTION",
+      "page": 2,
+      "content": "generic internet data that lacks the nuanced knowledge required for driving, resulting in a significant domain gap."
+    },
+    {
+      "id": "E04",
+      "section": "4.1 SCALABLE HIERARCHICAL DATA PIPELINE FOR DRIVING PRETRAINING",
+      "page": 5,
+      "content": "Training follows three stages: Driving Pre-training, imitation learning, and reinforcement learning."
+    },
+    {
+      "id": "E05",
+      "section": "4.1 SCALABLE HIERARCHICAL DATA PIPELINE FOR DRIVING PRETRAINING",
+      "page": 5,
+      "content": "(1) Foundational Perception: constructing representations of static and dynamic scene elements;"
+    },
+    {
+      "id": "E06",
+      "section": "4.1 SCALABLE HIERARCHICAL DATA PIPELINE FOR DRIVING PRETRAINING",
+      "page": 5,
+      "content": "(2) Dynamic Understanding: analyzing multi-agent dynamics and predicting near-term behaviors of surrounding entities;"
+    },
+    {
+      "id": "E07",
+      "section": "4.1 SCALABLE HIERARCHICAL DATA PIPELINE FOR DRIVING PRETRAINING",
+      "page": 5,
+      "content": "(3) Planning and Reasoning: formulating executable, safetyaware driving plans and providing concise rationales;"
+    },
+    {
+      "id": "E08",
+      "section": "4.1 SCALABLE HIERARCHICAL DATA PIPELINE FOR DRIVING PRETRAINING",
+      "page": 5,
+      "content": "(4) Advanced Reasoning: conducting counterfactual analyses and fine-grained trade-off evaluations."
+    },
+    {
+      "id": "E09",
+      "section": "D.2 SCALABLE HIERARCHICAL DATA PIPELINE",
+      "page": 21,
+      "content": "We first leverage Qwen2.5-VL (Bai et al., 2025) with crafted prompts to generate annotations"
+    },
+    {
+      "id": "E10",
+      "section": "4.1 SCALABLE HIERARCHICAL DATA PIPELINE FOR DRIVING PRETRAINING",
+      "page": 5,
+      "content": "normalization, rewriting, and question-template augmentation to ensure linguistic and semantic consistency."
+    },
+    {
+      "id": "E11",
+      "section": "D.2 SCALABLE HIERARCHICAL DATA PIPELINE",
+      "page": 21,
+      "content": "Any pair scoring below 60 is discarded. After this filtering process, we retain 2.3M high-quality QA pairs."
+    },
+    {
+      "id": "E12",
+      "section": "D.2 SCALABLE HIERARCHICAL DATA PIPELINE",
+      "page": 21,
+      "content": "Notably, applying the pipeline to NAVSIM produces 775K well-structured pairs, which we use to fine-tune the VLM,"
+    },
+    {
+      "id": "E13",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "We adopt InternVL3 (Zhu et al., 2025; Chen et al., 2024e) as the cognitive backbone"
+    },
+    {
+      "id": "E14",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "which act as cognitive tokens carrying driving priors and serve as cross-attention conditions in the diffusion transformer."
+    },
+    {
+      "id": "E15",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "via average pooling over $F _ { h }$ , providing stable contextual guidance during denoising."
+    },
+    {
+      "id": "E16",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "are encoded and concatenated with the noisy trajectory embeddings."
+    },
+    {
+      "id": "E17",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "is injected via AdaLN modulation, ensuring that the planner is conditioned on the vehicle’s physical state."
+    },
+    {
+      "id": "E18",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "Each block alternates between (i) self-attention, which models pairwise waypoint relations, and (ii) cross-attention,"
+    },
+    {
+      "id": "E19",
+      "section": "4.3 DIFFUSION GROUP RELATIVE POLICY OPTIMIZATION",
+      "page": 7,
+      "content": "with the results aggregated into a Predictive Driver Model Score (PDMS) that serves as the reward"
+    },
+    {
+      "id": "E20",
+      "section": "4.3 DIFFUSION GROUP RELATIVE POLICY OPTIMIZATION",
+      "page": 6,
+      "content": "Concretely, we sample $G$ trajectories, each represented by a diffusion chain:"
+    },
+    {
+      "id": "E21",
+      "section": "4.3 DIFFUSION GROUP RELATIVE POLICY OPTIMIZATION",
+      "page": 7,
+      "content": "while concurrently incorporating a behavior cloning loss to prevent collapse during exploration."
+    },
+    {
+      "id": "E22",
+      "section": "4.3 DIFFUSION GROUP RELATIVE POLICY OPTIMIZATION",
+      "page": 7,
+      "content": "We omit the PPO-style clipping and set the update iteration to 1,"
+    },
+    {
+      "id": "E23",
+      "section": "Q7. Why does the paper adopt such a low discount factor (0.6) for a long-horizon driving task?",
+      "page": 18,
+      "content": "the discount factor is applied across denoising steps rather than over the temporal horizon of the driving task."
+    },
+    {
+      "id": "E24",
+      "section": "5.1 EXPERIMENTAL SETUP.",
+      "page": 7,
+      "content": "In the first stage, we conduct supervised fine-tuning (SFT) on the VLM using the dataset constructed by our hierarchical data pipeline for three epochs."
+    },
+    {
+      "id": "E25",
+      "section": "5.1 EXPERIMENTAL SETUP.",
+      "page": 7,
+      "content": "In the second stage, with the VLM parameters frozen, we train the diffusion model via DDPM for 200 epochs."
+    },
+    {
+      "id": "E26",
+      "section": "5.1 EXPERIMENTAL SETUP.",
+      "page": 7,
+      "content": "In the third stage, we further optimize the diffusion model using reinforcement learning for 10 epochs, with one policy update per batch."
+    },
+    {
+      "id": "E27",
+      "section": "E EXPERIMENT DETAILS",
+      "page": 22,
+      "content": "During training, the denoising process involves 100 steps, while for inference, the diffusion process is reduced to 5 steps."
+    },
+    {
+      "id": "E28",
+      "section": "5.1 EXPERIMENTAL SETUP.",
+      "page": 7,
+      "content": "The dataset is split into navtrain (1,192 training scenes) and navtest (136 evaluation scenes)."
+    },
+    {
+      "id": "E29",
+      "section": "5.1 EXPERIMENTAL SETUP.",
+      "page": 7,
+      "content": "Bench2Drive is a CARLA-based benchmark composed of 220 short routes, each containing a distinct, safety-critical scenario."
+    },
+    {
+      "id": "E30",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 8,
+      "content": "ReCogDrive achieves a PDMS of 90.8, establishing a new state-of-the-art."
+    },
+    {
+      "id": "E31",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 8,
+      "content": "by 2.7 and 2.5 PDMS, respectively, while using only camera input."
+    },
+    {
+      "id": "E32",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 8,
+      "content": "ReCogDrive achieves the highest scenario success rate of 45.45% and the top Driving Score of 71.36, surpassing prior end-to-end baselines."
+    },
+    {
+      "id": "E33",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "97.4 91.3 93.0 | 100 | 77.2 | 82.4 |"
+    },
+    {
+      "id": "E34",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "97.6 93.1 92.7 | 100 | 79.1 | 84.1 |"
+    },
+    {
+      "id": "E35",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "98.1 94.7 94.2 | 100 | 80.9 | 86.5 |"
+    },
+    {
+      "id": "E36",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "97.9 97.3 94.9 | 100.0 | 87.3 | 90.8 |"
+    },
+    {
+      "id": "E37",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "| VLM Plain Text† | 0.5839 | 84.1 | 0.01 |"
+    },
+    {
+      "id": "E38",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "| + RoPE &amp; QKNorm | 0.0750 | 86.5 | 0.00 |"
+    },
+    {
+      "id": "E39",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "<tr><td>ReCogDrive</td><td>67.30</td><td>64.95</td><td>49.34</td><td>70.20</td><td>42.36</td><td>56.71</td></tr>"
+    },
+    {
+      "id": "E40",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "<tr><td>GPT-4o</td><td>67.27</td><td>35.37</td><td>51.30</td><td>75.75</td><td>45.40</td><td>51.96</td></tr>"
+    },
+    {
+      "id": "E41",
+      "section": "F LIMITATIONS",
+      "page": 22,
+      "content": "These include the difficulty of processing multiple camera inputs, handling video frame sequences, and relatively high inference latency."
+    },
+    {
+      "id": "E42",
+      "section": "F LIMITATIONS",
+      "page": 23,
+      "content": "We also plan to deploy and evaluate our model on real vehicles."
+    },
+    {
+      "id": "E43",
+      "section": "I.4 FAILURE CASES",
+      "page": 23,
+      "content": "aggressive driving caused by the model’s tendency to prioritize ego progress, leading to assertive maneuvers."
+    },
+    {
+      "id": "E44",
+      "section": "I.4 FAILURE CASES",
+      "page": 23,
+      "content": "directly feeding multi-view camera inputs sometimes results in suboptimal performance, particularly in turning scenarios."
+    },
+    {
+      "id": "E45",
+      "section": "Q2. Does the VLM merely act as a feature extractor?",
+      "page": 17,
+      "content": "Incorporating CoT-based guidance provides no gain, mainly due to the limited diversity of NAVSIM scenarios."
+    },
+    {
+      "id": "E46",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "the VLM can optionally output high-level driving instructions and chain-of-thought reasoning to enhance trajectory generation."
+    },
+    {
+      "id": "E47",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "The VLM encodes multi-view images and textual queries into hidden states"
+    },
+    {
+      "id": "E48",
+      "section": "Q2. Does the VLM merely act as a feature extractor?",
+      "page": 17,
+      "content": "Moreover, Bench2Drive already supplies explicit navigation instructions."
+    },
+    {
+      "id": "E49",
+      "section": "E EXPERIMENT DETAILS",
+      "page": 21,
+      "content": "a closed-loop metric that holistically assesses safety (NC, DAC, TTC), comfort (C), and progress (EP):"
+    },
+    {
+      "id": "E50",
+      "section": "E EXPERIMENT DETAILS",
+      "page": 21,
+      "content": "we report the Success Rate (SR) and the average Driving Score (DS)."
+    },
+    {
+      "id": "E51",
+      "section": "Q2. Does the VLM merely act as a feature extractor?",
+      "page": 17,
+      "content": "we utilize the GPT-Score from the DriveLM and DriveBench benchmarks, as presented in Tab. 5."
+    },
+    {
+      "id": "E52",
+      "section": "5.1 EXPERIMENTAL SETUP.",
+      "page": 7,
+      "content": "including DriveLM (Sima et al., 2024) and LingoQA (Marcu et al., 2024)"
+    },
+    {
+      "id": "E53",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 8,
+      "content": "Compared with our reproduced InternVL3 (Zhu et al., 2025) and QwenVL2.5 (Bai et al., 2025) trained directly on NAVSIM trajectories,"
+    },
+    {
+      "id": "E54",
+      "section": "4.2 COGNITION-GUIDED DIFFUSION PLANNER",
+      "page": 6,
+      "content": "Our diffusion planner builds on DiT (Peebles & Xie, 2023; Yao et al., 2025) blocks,"
+    },
+    {
+      "id": "E55",
+      "section": "I.4 FAILURE CASES",
+      "page": 23,
+      "content": "We also observe unsafe following distances due to insufficient modeling of surrounding vehicle behaviors,"
+    },
+    {
+      "id": "E56",
+      "section": "I.4 FAILURE CASES",
+      "page": 23,
+      "content": "predicted trajectories are visually close to the ground truth but still scored as failures, suggesting that the evaluation metrics may suffer from false negatives."
+    },
+    {
+      "id": "E57",
+      "section": "REFERENCES",
+      "page": 16,
+      "content": "Internvl3: Exploring advanced training and test-time recipes for open-source multimodal models. arXiv preprint arXiv:2504.10479, 2025."
+    },
+    {
+      "id": "E58",
+      "section": "REFERENCES",
+      "page": 13,
+      "content": "Diffusiondrive: Truncated diffusion model for end-to-end autonomous driving. arXiv preprint arXiv:2411.15139, 2024."
+    },
+    {
+      "id": "E59",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 8,
+      "content": "it outperforms Diffusion-Drive (Liao et al., 2024) and WoTE (Li et al., 2025b)"
+    },
+    {
+      "id": "E60",
+      "section": "REFERENCES",
+      "page": 11,
+      "content": "Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking. Advances in Neural Information Processing Systems, 37:28706–28719, 2025."
+    },
+    {
+      "id": "E61",
+      "section": "REFERENCES",
+      "page": 12,
+      "content": "Bench2drive: Towards multi-ability benchmarking of closed-loop end-to-end autonomous driving. Advances in Neural Information Processing Systems, 37:819–844, 2024."
+    },
+    {
+      "id": "E62",
+      "section": "REFERENCES",
+      "page": 14,
+      "content": "Drivelm: Driving with graph visual question answering. In European Conference on Computer Vision, pp. 256–274. Springer, 2024."
+    },
+    {
+      "id": "E63",
+      "section": "REFERENCES",
+      "page": 14,
+      "content": "Diffusion policy policy optimization. arXiv preprint arXiv:2409.00588, 2024."
+    },
+    {
+      "id": "E64",
+      "section": "4.3 DIFFUSION GROUP RELATIVE POLICY OPTIMIZATION",
+      "page": 6,
+      "content": "Following Ren et al. (2024), we interpret the diffusion policy"
+    },
+    {
+      "id": "E65",
+      "section": "REFERENCES",
+      "page": 14,
+      "content": "Scalable diffusion models with transformers. In Proceedings of the IEEE/CVF international conference on computer vision, pp. 4195–4205, 2023."
+    },
+    {
+      "id": "E66",
+      "section": "5.2 MAIN RESULTS AND ABLATION STUDY",
+      "page": 9,
+      "content": "achieves a 7.8× speedup and a 2.4 PDMS gain over the text baseline"
+    },
+    {
+      "id": "E67",
+      "section": "4.3 DIFFUSION GROUP RELATIVE POLICY OPTIMIZATION",
+      "page": 7,
+      "content": "We then compute the group-standardized advantage:"
+    },
+    {
+      "id": "E68",
+      "section": "3 PRELIMINARIES",
+      "page": 3,
+      "content": "is the sequence of future waypoints and headings."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "Internvl3: Exploring advanced training and test-time recipes for open-source multimodal models",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "ReCogDrive 采用 InternVL3 作为认知骨干并进行驾驶领域适配。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2504.10479",
+      "url": "",
+      "evidence_ids": [
+        "E13",
+        "E57"
+      ]
+    },
+    {
+      "title": "Diffusiondrive: Truncated diffusion model for end-to-end autonomous driving",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "NAVSIM 实验中的扩散规划比较基线。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2411.15139",
+      "url": "",
+      "evidence_ids": [
+        "E58",
+        "E59"
+      ]
+    },
+    {
+      "title": "Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking",
+      "paper_id": "navsim-2024",
+      "relation_type": "uses_benchmark",
+      "description": "用于规划评估，并为 DiffGRPO 提供仿真奖励。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E19",
+        "E28",
+        "E60"
+      ]
+    },
+    {
+      "title": "Bench2drive: Towards multi-ability benchmarking of closed-loop end-to-end autonomous driving",
+      "paper_id": null,
+      "relation_type": "uses_benchmark",
+      "description": "用于 CARLA 闭环驾驶和多能力测试。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E29",
+        "E32",
+        "E61"
+      ]
+    },
+    {
+      "title": "Drivelm: Driving with graph visual question answering",
+      "paper_id": null,
+      "relation_type": "uses_dataset",
+      "description": "其驾驶问答数据用于认知训练，论文同时在 DriveLM 上评估问答表现。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E51",
+        "E52",
+        "E62"
+      ]
+    },
+    {
+      "title": "Diffusion policy policy optimization",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "论文沿用该工作的视角，将扩散去噪过程解释为内部决策过程。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2409.00588",
+      "url": "",
+      "evidence_ids": [
+        "E63",
+        "E64"
+      ]
+    },
+    {
+      "title": "Scalable diffusion models with transformers",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "扩散规划器建立在 DiT 模块之上。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E54",
+        "E65"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F1",
+      "caption": "Figure 1: Overview of ReCogDrive. We present ReCogDrive, an end-to-end autonomous driving system, which possesses rich driving priors and generates continuous, stable trajectories via a diffusion denoising process. ReCogDrive is capable of performing tasks spanning from low-level scene perception and motion prediction to high-level driving planning and decision making.",
+      "description": "总体概览分为训练数据、模型架构和任务示例三部分。中央展示文本分词器与视觉编码器连接大语言模型，下方区分推理 token 和动作 token，并显示扩散规划器及轨迹输出；显式规划解释被标为可选。右侧分别展示感知、预测和规划示例。该图概括了论文从驾驶认知数据到连续轨迹生成的核心设计；示例属于作者的能力展示。",
+      "page": 2,
+      "path": "/paper-assets/recogdrive-2025/f1.webp",
+      "type": "concept_overview"
+    },
+    {
+      "id": "F3",
+      "caption": "Figure 3: Training Pipeline and Model Architecture. ReCogDrive couples a VLM with a diffusion planner: the VLM encodes inputs into cognitive tokens guiding trajectory denoising. Training follows three stages: Driving Pre-training, imitation learning, and reinforcement learning.",
+      "description": "上部对照驾驶预训练与模仿学习、强化学习阶段：前者训练视觉编码器和语言模型，后者以雪花标记冻结 VLM，以火焰标记训练扩散规划器。下部展开规划器：带噪动作、历史动作和认知 token 经各自编码后汇合并投影，进入重复的 Lightning Diffusion Transformer 模块，最后由动作解码器输出未来轨迹。自车状态和时间步经编码后注入去噪模块。该图解释认知条件、历史信息和物理状态如何进入规划器。",
+      "page": 5,
+      "path": "/paper-assets/recogdrive-2025/f3.webp",
+      "type": "architecture"
+    },
+    {
+      "id": "F4",
+      "caption": "Figure 4: Comparison of Training Paradigms. (a) Imitation Learning: the diffusion planner is trained offline to mimic ground truth trajectories using L1/L2 losses, but tends to learn averaged, suboptimal paths. (b) Reinforcement Learning: multiple trajectories are sampled and evaluated in the NAVSIM simulator, scored on collision avoidance, drivable area compliance and other metrics, and advantages are computed via group computation to update the diffusion planner.",
+      "description": "保留面板 (a) Imitation Learning 与 (b) Reinforcement Learning。(a) 展示多条专家轨迹、优化方向和 L1/L2 损失训练路径；(b) 展示扩散规划器采样多条候选轨迹，经驾驶仿真器评分，再由 Group Computation 产生优势并通过 Policy Loss 更新规划器，同时保留 BC Loss 路径。绿、红轨迹表示图示的不同奖励结果。该示意图解释 DiffGRPO 的训练闭环及其与专家模仿的区别。",
+      "page": 6,
+      "path": "/paper-assets/recogdrive-2025/f4.webp",
+      "type": "method_overview"
+    }
+  ],
+  "tags": [
+    "Bench2Drive",
+    "DiffGRPO",
+    "NAVSIM",
+    "强化学习",
+    "扩散轨迹规划",
+    "端到端自动驾驶",
+    "视觉语言模型",
+    "驾驶问答"
+  ],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T12:39:23+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.1",
+    "source_hash": "c3166925daae7ff447f7bb95fcc155e1bd00c8e9cdac0fbb558f24ca5842934f",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

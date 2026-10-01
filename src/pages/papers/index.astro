@@ -1,0 +1,101 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PaperTags from '../../components/papers/PaperTags.astro';
+import PaperTagTools from '../../components/papers/PaperTagTools.astro';
+import { paperIndex, assetUrl, paperTagSnapshot } from '../../lib/papers';
+import '../../styles/papers.css';
+
+const { papers } = paperIndex();
+const tags = paperTagSnapshot().config.tags.map(t => t.name).sort();
+const years = [...new Set(papers.flatMap(p => p.year ? [p.year] : []))].sort((a, b) => b - a);
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<BaseLayout title="Paper Library" description="论文知识库：有原文证据的研究问题、方法、实验与阅读思考。" lang="zh-CN">
+  <section class="page-heading" aria-labelledby="papers-title">
+    <div class="container page-heading-inner">
+      <div><p class="eyebrow">Reading & research</p><h1 id="papers-title">Paper Library</h1></div>
+      <p>论文知识库。把研究问题、方法与实验串起来，让每一条重要结论都能回到原文。</p>
+    </div>
+  </section>
+  <section class="container papers-library" data-paper-library aria-label="Browse papers">
+    <PaperTagTools />
+    <form class="paper-filters" role="search">
+      <label class="paper-search">搜索论文<input type="search" name="q" placeholder="标题、作者或关键词…" autocomplete="off" /></label>
+      <label>年份<select name="year"><option value="">全部年份</option>{years.map(year => <option value={year}>{year}</option>)}</select></label>
+      <label>标签<select name="tag"><option value="">全部标签</option>{tags.map(tag => <option value={tag}>{tag}</option>)}</select></label>
+      <button type="reset" class="filter-button">重置</button>
+    </form>
+    <p class="paper-count" aria-live="polite" data-paper-count>{papers.length} 篇论文</p>
+    <div class="paper-list">
+      {papers.map(paper => <article class="paper-card" data-paper-card data-search-base={[paper.title, paper.short_title, ...paper.authors].join(' ').toLowerCase()} data-search={[paper.title, paper.short_title, ...paper.authors, ...paper.tags].join(' ').toLowerCase()} data-year={paper.year ?? ''} data-tags={JSON.stringify(paper.tags)}>
+        <div class="paper-card-main">
+          <p class="note-category">{paper.short_title || 'Paper'} · {paper.year ?? 'Year not stated'}{paper.venue && ` · ${paper.venue}`}</p>
+          <h2><a href={`${base}/papers/${paper.id}/`}>{paper.title}</a></h2>
+          <p class="paper-authors">{paper.authors.join(', ') || 'Authors not explicitly stated'}</p>
+          <p>{paper.one_sentence}</p>
+          <PaperTags id={paper.id} title={paper.title} />
+        </div>
+        {paper.thumbnail && <a class="paper-thumbnail" href={`${base}/papers/${paper.id}/`} aria-label={`阅读 ${paper.title}`}><img src={assetUrl(paper.thumbnail, base)!} alt="" loading="lazy" /></a>}
+        <a class="arrow-link" href={`${base}/papers/${paper.id}/`}>Read ↗</a>
+      </article>)}
+    </div>
+    <div class="paper-empty" data-paper-empty hidden={papers.length > 0}>
+      {papers.length === 0 ? <><h2>从一篇论文开始。</h2><p>论文尚未收录。运行本地 ingest，完成分析后重新构建网站即可显示。</p><code>python tools/papers/ingest.py /path/to/paper.pdf</code></> : <p>没有匹配的论文。试试其他关键词，或重置筛选。</p>}
+    </div>
+    <noscript><p>当前显示全部论文；搜索和筛选需要启用 JavaScript。</p></noscript>
+  </section>
+  <script>
+    const library = document.querySelector<HTMLElement>('[data-paper-library]');
+    if (library) {
+      const form = library.querySelector<HTMLFormElement>('.paper-filters')!;
+      const search = form.querySelector<HTMLInputElement>('[name=q]')!;
+      const year = form.querySelector<HTMLSelectElement>('[name=year]')!;
+      const tag = form.querySelector<HTMLSelectElement>('[name=tag]')!;
+      const cards = [...library.querySelectorAll<HTMLElement>('[data-paper-card]')];
+      const parameters = new URLSearchParams(location.search);
+      search.value = parameters.get('q') ?? '';
+      year.value = parameters.get('year') ?? '';
+      tag.value = parameters.get('tag') ?? '';
+      const filter = () => {
+        const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        let count = 0;
+        cards.forEach(card => {
+          const show = words.every(word => (card.dataset.search ?? '').includes(word)) &&
+            (!year.value || card.dataset.year === year.value) &&
+            (!tag.value || (JSON.parse(card.dataset.tags ?? '[]') as string[]).includes(tag.value));
+          card.hidden = !show;
+          if (show) count++;
+        });
+        library.querySelector<HTMLElement>('[data-paper-count]')!.textContent = `${count} / ${cards.length} 篇论文`;
+        library.querySelector<HTMLElement>('[data-paper-empty]')!.hidden = count > 0;
+        const next = new URL(location.href);
+        ['q', 'year', 'tag'].forEach(key => next.searchParams.delete(key));
+        if (search.value.trim()) next.searchParams.set('q', search.value.trim());
+        if (year.value) next.searchParams.set('year', year.value);
+        if (tag.value) next.searchParams.set('tag', tag.value);
+        history.replaceState(null, '', next);
+      };
+      form.addEventListener('submit', event => { event.preventDefault(); filter(); });
+      form.addEventListener('input', filter);
+      form.addEventListener('change', filter);
+      form.addEventListener('reset', () => setTimeout(filter, 0));
+      document.addEventListener('paper-tags-change', event => {
+        const names = (event as CustomEvent<string[]>).detail;
+        const previous = tag.value || new URLSearchParams(location.search).get('tag') || '';
+        tag.replaceChildren(new Option('全部标签', ''), ...names.map(name => new Option(name, name)));
+        // Retain unknown/deleted URL tags: show zero results instead of silently clearing a filter.
+        if (previous && !names.includes(previous)) tag.add(new Option(`${previous}（不存在）`, previous));
+        tag.value = previous;
+        filter();
+      });
+      if (parameters.get('tag') && !tagsOptionExists(tag, parameters.get('tag')!)) {
+        tag.add(new Option(`${parameters.get('tag')}（不存在）`, parameters.get('tag')!));
+        tag.value = parameters.get('tag')!;
+      }
+      filter();
+    }
+    function tagsOptionExists(select: HTMLSelectElement, value: string) {
+      return [...select.options].some(option => option.value === value);
+    }
+  </script>
+</BaseLayout>

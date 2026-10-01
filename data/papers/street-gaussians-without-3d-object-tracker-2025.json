@@ -1,0 +1,848 @@
+{
+  "schema_version": "1.0",
+  "id": "street-gaussians-without-3d-object-tracker-2025",
+  "metadata": {
+    "title": "Street Gaussians without 3D Object Tracker",
+    "short_title": "",
+    "authors": [
+      "Ruida Zhang",
+      "Chengxi Li",
+      "Chenyangguang Zhang",
+      "Xingyu Liu",
+      "Haili Yuan",
+      "Yanyan Li",
+      "Xiangyang Ji",
+      "Gim Hee Lee"
+    ],
+    "year": 2025,
+    "venue": "arXiv",
+    "doi": "",
+    "arxiv_id": "2412.05548v4",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "https://lolrudy.github.io/No3DTrackSG/",
+    "code_url": "",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "论文针对动态驾驶场景重建对人工物体位姿或3D跟踪器的依赖，提出结合2D基础模型跟踪与LiDAR点云融合的车辆重建方法。方法逐帧构建规范空间物体模型并估计初始轨迹，再以轨迹监督HexPlane隐式特征空间中的逐点运动学习，随后解除轨迹约束以修正位姿误差和恢复漏检。实验在Waymo-NOTR和KITTI上验证了重建与新视角合成效果。",
+    "one_sentence": "以2D跟踪和LiDAR融合生成车辆模型及初始轨迹，再通过阶段性轨迹监督的HexPlane逐点运动学习完成动态街景高斯重建。",
+    "research_problem": "如何在不使用3D物体跟踪器或真实物体轨迹的条件下，重建快速运动的街景车辆，并降低跟踪误差与漏检对渲染的影响。",
+    "motivation": "人工位姿标注耗时，而3D跟踪器受限于训练数据规模与跨场景泛化；直接按跟踪位姿移动物体会把位姿错误传递给渲染结果。",
+    "core_idea": "用2D基础模型提供物体关联，通过LiDAR点云注册获得初始3D轨迹；将轨迹作为运动学习的早期监督，而不是始终固定使用的刚体变换。",
+    "method_summary": "GLEE生成各视角车辆掩码与轨迹，LiDAR投影完成物体点云分割和跨视角关联，ICP逐帧融合规范空间模型并估计位姿。动态车辆初始化为各向同性Gaussian marbles，HexPlane与两个解码器预测位置及颜色变化；轨迹运动损失在训练前期启用，之后由图像、深度与正则化损失继续优化。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E18",
+      "E19"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "结合2D跟踪与3D点云融合的车辆初始化",
+      "description": "利用2D基础模型的物体关联和LiDAR点云，逐帧重建规范空间车辆模型，并通过注册估计轨迹，消除对3D跟踪器的依赖。",
+      "evidence_ids": [
+        "E03",
+        "E05",
+        "E06"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "由初始轨迹引导的隐式逐点运动学习",
+      "description": "在HexPlane特征空间中预测高斯位置与颜色变化，仅在前40%的迭代使用轨迹运动监督，随后解除该约束，使模型能够调整位姿误差并补偿漏检。",
+      "evidence_ids": [
+        "E09",
+        "E10",
+        "E11",
+        "E12"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "无需真实跟踪标注的动态街景实验验证",
+      "description": "在Waymo-NOTR动态场景的重建和新视角合成中，各项报告指标均优于所比较方法；在KITTI上优于NeRF基线，相比使用真实位姿的Street Gaussians具有更高SSIM和更低LPIPS，但PSNR略低。",
+      "evidence_ids": [
+        "E18",
+        "E19",
+        "E20",
+        "E21"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "按时间同步的多相机图像",
+      "各相机内参及逐帧外参",
+      "车顶LiDAR逐帧3D点云"
+    ],
+    "outputs": [
+      "静态背景与动态物体的3D高斯场景表示",
+      "车辆规范空间点云模型及初始3D轨迹",
+      "随时间变化的高斯位置和颜色",
+      "指定相机位姿与时间的新视角图像"
+    ],
+    "components": [
+      {
+        "name": "静动态分割与背景建模",
+        "description": "Mask2Former将人和车辆归为动态部分，其余对象归为静态部分；静态背景使用3DGS建模。",
+        "evidence_ids": [
+          "E04"
+        ]
+      },
+      {
+        "name": "2D轨迹提升与跨视角物体关联",
+        "description": "GLEE产生逐视角车辆掩码轨迹。LiDAR点投影到图像后按掩码分配给物体，并按到点云中心的距离去除离群点；不同视角物体点云在同一时间步共享超过50个点时建立关联。",
+        "evidence_ids": [
+          "E05",
+          "E07",
+          "E08"
+        ]
+      },
+      {
+        "name": "规范空间增量融合与ICP位姿估计",
+        "description": "从车辆首次出现的点云初始化规范模型，再将后续局部点云用ICP对齐。重叠率超过30%时记录位姿并融合点云，10%至30%时只记录位姿，低于10%时丢弃该帧。",
+        "evidence_ids": [
+          "E06",
+          "E08A",
+          "E08B",
+          "E08C"
+        ]
+      },
+      {
+        "name": "HexPlane逐点变形与Gaussian marbles",
+        "description": "采用三个空间平面和三个时空平面存储特征，以双线性插值查询并用Hadamard积组合。两个MLP解码器分别预测位置偏移和颜色变化。动态车辆采用各向同性Gaussian marbles以减少自由度。",
+        "evidence_ids": [
+          "E09",
+          "E09A",
+          "E10",
+          "E12"
+        ]
+      },
+      {
+        "name": "阶段性运动监督与场景优化",
+        "description": "运动损失使逐点位移接近初始位姿对应的位移，仅在前40%的迭代启用。其他目标包括图像L1、结构相似性、LiDAR深度、特征网格总变差和颜色变化正则化。先优化静态背景20,000次，再在完整图像上优化所有高斯50,000次。",
+        "evidence_ids": [
+          "E11",
+          "E13",
+          "E13A",
+          "E14",
+          "E14A"
+        ]
+      }
+    ],
+    "pipeline": [
+      "读取多相机图像、标定参数和逐帧LiDAR点云。",
+      "分割静动态区域，并使用GLEE跟踪车辆。",
+      "将LiDAR投影到车辆掩码，去除离群点并关联跨视角物体。",
+      "逐帧ICP注册和点云融合，得到规范空间车辆模型及初始轨迹。",
+      "以车辆模型初始化Gaussian marbles，查询HexPlane并解码逐点位置与颜色变化。",
+      "前期用轨迹运动损失引导学习，随后移除运动监督并继续优化。",
+      "将变形后的高斯投影并splat到目标图像平面。"
+    ],
+    "details": "运动损失比较预测逐点位移与初始物体位姿诱导的位移。逐点运动和颜色变化承担动态车辆的变形表达，而Gaussian marbles使用相同的三轴尺度和单位旋转。训练使用Adam及3DGS的学习率计划；长序列分成多个片段。",
+    "evidence_ids": [
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E07",
+      "E08",
+      "E08A",
+      "E08B",
+      "E08C",
+      "E09",
+      "E09A",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E13A",
+      "E14",
+      "E14A",
+      "E15",
+      "E15A"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "Waymo-NOTR dynamic32：32个动态场景，使用三个前向相机，图像缩放至960 × 640",
+      "Waymo-NOTR static32：补充材料中的静态场景评估",
+      "KITTI：75%和50%图像用于训练的两种设置"
+    ],
+    "benchmarks": [
+      "Waymo-NOTR场景重建：全部图像帧用于训练和评估",
+      "Waymo-NOTR新视角合成：每第10个时间步留出评估",
+      "KITTI-75%：每第4帧留出测试",
+      "KITTI-50%：每第2帧留出测试",
+      "Waymo-NOTR新视角合成组件消融"
+    ],
+    "metrics": [
+      "PSNR ↑",
+      "SSIM ↑",
+      "LPIPS ↓",
+      "DPSNR ↑：真实3D包围盒投影区域内的动态对象PSNR",
+      "DSSIM ↑：真实3D包围盒投影区域内的动态对象SSIM",
+      "推理速度：FPS"
+    ],
+    "baselines": [
+      "3DGS",
+      "EmerNeRF",
+      "S3Gaussian",
+      "MARS",
+      "NSG",
+      "Street Gaussians"
+    ],
+    "main_results": [
+      {
+        "text": "Waymo-NOTR dynamic32上，场景重建PSNR/SSIM/LPIPS为32.56/0.936/0.059，DPSNR/DSSIM为28.51/0.868；新视角合成为28.85/0.867/0.088，动态指标为25.58/0.779。表1中这些指标均优于比较方法。",
+        "evidence_ids": [
+          "E18",
+          "E19"
+        ]
+      },
+      {
+        "text": "Waymo-NOTR新视角合成中，相比S3Gaussian，DPSNR提高2.66 dB、DSSIM提高0.099；相比Street Gaussians，PSNR提高1.87 dB。",
+        "evidence_ids": [
+          "E19A",
+          "E19B"
+        ]
+      },
+      {
+        "text": "KITTI-75%上，本方法PSNR/SSIM/LPIPS为25.49/0.889/0.063；KITTI-50%为25.11/0.877/0.067。相比Street Gaussians，两种设置下SSIM和LPIPS更好，但PSNR略低。",
+        "evidence_ids": [
+          "E20",
+          "E21"
+        ]
+      },
+      {
+        "text": "比较设置需要结合输入条件理解：Waymo-NOTR的Street Gaussians使用nuScenes预训练的3D检测跟踪系统；本方法的2D跟踪器未在Waymo或KITTI训练。KITTI的Street Gaussians基线使用真实跟踪标注，其他方法结果由既有论文借用。",
+        "evidence_ids": [
+          "E22",
+          "E22A",
+          "E22B",
+          "E22C"
+        ]
+      },
+      {
+        "text": "消融中，不使用跟踪时新视角PSNR降至25.25、DPSNR降至21.71；保留跟踪初始化但去除运动损失时，DPSNR由25.58降至24.54。使用真实位姿监督时DPSNR为25.71。",
+        "evidence_ids": [
+          "E23",
+          "E23A",
+          "E23B",
+          "E18"
+        ]
+      },
+      {
+        "text": "补充实验中，2D轨迹加刚体变换的PSNR/DPSNR为27.69/25.04，本方法为28.85/25.58，支持隐式运动建模相对直接刚体变换的收益。",
+        "evidence_ids": [
+          "E24",
+          "E24A"
+        ]
+      },
+      {
+        "text": "Waymo-NOTR static32上，PSNR/SSIM/LPIPS为28.72/0.857/0.092；表4中SSIM和LPIPS最优，但PSNR低于EmerNeRF的28.89。",
+        "evidence_ids": [
+          "E25",
+          "E25A"
+        ]
+      },
+      {
+        "text": "论文报告在单张NVIDIA RTX 3090上，每个视频片段训练约2小时，在960 × 640分辨率下推理达到100 FPS。",
+        "evidence_ids": [
+          "E26",
+          "E26A"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E16",
+      "E16A",
+      "E16B",
+      "E16C",
+      "E16D",
+      "E17",
+      "E17A",
+      "E18",
+      "E19",
+      "E19A",
+      "E19B",
+      "E20",
+      "E21",
+      "E22",
+      "E22A",
+      "E22B",
+      "E22C",
+      "E23",
+      "E23A",
+      "E23B",
+      "E24",
+      "E24A",
+      "E25",
+      "E25A",
+      "E26",
+      "E26A"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "方法主要针对运动车辆；人体使用没有显式运动指导的4DGS建模，部分场景的人体运动不准确。",
+      "evidence_ids": [
+        "E27",
+        "E27A"
+      ]
+    },
+    {
+      "text": "人和车辆之外的动态对象，例如动物和交通灯，目前被当作静态对象。",
+      "evidence_ids": [
+        "E28"
+      ]
+    },
+    {
+      "text": "方法需要对每个场景分别优化。",
+      "evidence_ids": [
+        "E29"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI解读：主要价值在于把跟踪结果作为可解除的运动先验，同时以隐式逐点变形继续修正轨迹，而非始终依赖刚体位姿。消融支持跟踪初始化与运动监督均有作用。泛化收益应结合基线的预训练来源和真实位姿使用情况理解；这些结果尚不足以确认对所有驾驶环境的普遍优势。",
+    "open_questions": [
+      "运动监督的解除时机对严重轨迹噪声和连续漏检有多敏感？",
+      "人体位姿先验能否改善当前没有显式运动指导的人体建模？",
+      "如何将动物、交通灯等对象纳入更完整的动态建模？",
+      "能否通过前馈预测减少逐场景优化成本？",
+      "正文与实现细节对HexPlane多分辨率设置的表述存在差异，复现时应采用哪一套配置？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "1. Introduction",
+      "page": 1,
+      "content": "collecting ground-truth poses is labor-intensive, limiting the applicability of these methods to scenes beyond the existing datasets."
+    },
+    {
+      "id": "E02",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "rendering quality becomes highly dependent on pose accuracy."
+    },
+    {
+      "id": "E03",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "Specifically, we integrate 2D tracking outputs with LiDAR data to trace the trajectory of each vehicle in 3D."
+    },
+    {
+      "id": "E04",
+      "section": "3.2. Overview",
+      "page": 4,
+      "content": "We employ Mask2Former [12] to segment the scene into static and dynamic parts."
+    },
+    {
+      "id": "E05",
+      "section": "3.3. Tracking Cars in 3D with Robust 2D Tracker",
+      "page": 4,
+      "content": "We employ GLEE [84] to track all vehicles within the 2D image plane, obtaining 2D object trajectories in each camera view."
+    },
+    {
+      "id": "E06",
+      "section": "3.3. Tracking Cars in 3D with Robust 2D Tracker",
+      "page": 4,
+      "content": "For each subsequent frame, we apply Iterative Closest Point (ICP)"
+    },
+    {
+      "id": "E07",
+      "section": "3.3. Tracking Cars in 3D with Robust 2D Tracker",
+      "page": 4,
+      "content": "we perform outlier removal to improve stability in subsequent reconstruction based on the point distance to the point cloud center."
+    },
+    {
+      "id": "E08",
+      "section": "3.3. Tracking Cars in 3D with Robust 2D Tracker",
+      "page": 4,
+      "content": "if they share more than 50 points in one time step."
+    },
+    {
+      "id": "E08A",
+      "section": "3.3. Tracking Cars in 3D with Robust 2D Tracker",
+      "page": 5,
+      "content": "of more than 30% with O, we record the object pose"
+    },
+    {
+      "id": "E08B",
+      "section": "3.3. Tracking Cars in 3D with Robust 2D Tracker",
+      "page": 5,
+      "content": "is between 10% and 30%, we only record the object pose"
+    },
+    {
+      "id": "E08C",
+      "section": "3.3. Tracking Cars in 3D with Robust 2D Tracker",
+      "page": 5,
+      "content": "is lower than 10%, we assume a 2D tracking failure for that frame and discard it to filter out tracking errors."
+    },
+    {
+      "id": "E09",
+      "section": "3.4. Learning Point Motion",
+      "page": 5,
+      "content": "by decomposing the 4D feature voxels into six learnable feature planes."
+    },
+    {
+      "id": "E09A",
+      "section": "3.4. Learning Point Motion",
+      "page": 5,
+      "content": "The features of all planes are combined using the Hadamard product."
+    },
+    {
+      "id": "E10",
+      "section": "3.2. Overview",
+      "page": 4,
+      "content": "and color change $\\Delta \\mathcal { C } _ { t }$ based on the HexPlane features"
+    },
+    {
+      "id": "E11",
+      "section": "3.4. Learning Point Motion",
+      "page": 5,
+      "content": "We apply this loss only for the first 40% iterations to provide a strong initial motion prior."
+    },
+    {
+      "id": "E12",
+      "section": "3.4. Learning Point Motion",
+      "page": 5,
+      "content": "Following [74], we adopt isotropic Gaussian marbles for dynamic points to reduce degrees of freedom and simplify optimization."
+    },
+    {
+      "id": "E13",
+      "section": "3.5. Optimization Objective",
+      "page": 5,
+      "content": "Besides the motion loss introduced above, the loss function comprises five components"
+    },
+    {
+      "id": "E13A",
+      "section": "12. Details of Loss Functions",
+      "page": 15,
+      "content": "This L1 regularization loss minimizes the predicted color change"
+    },
+    {
+      "id": "E14",
+      "section": "3.5. Optimization Objective",
+      "page": 6,
+      "content": "we render using only static Gaussians and supervise only the static regions of the images over 20,000 iterations."
+    },
+    {
+      "id": "E14A",
+      "section": "3.5. Optimization Objective",
+      "page": 6,
+      "content": "In the second stage, we train all Gaussians on the whole images for 50,000 iterations."
+    },
+    {
+      "id": "E15",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "We use the Adam optimizer [39] with the same learning rate schedule as in 3DGS [37]."
+    },
+    {
+      "id": "E15A",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "[32] and segment the scene into multiple clips."
+    },
+    {
+      "id": "E16",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "We use the dynamic32 subset, consisting of 32 dynamic scenes, for evaluating dynamic reconstruction."
+    },
+    {
+      "id": "E16A",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "we use three frontal camera images resized to 960 × 640."
+    },
+    {
+      "id": "E16B",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "For scene reconstruction, all image frames are used for training and evaluation;"
+    },
+    {
+      "id": "E16C",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "for novel view synthesis, every 10th time step is excluded for evaluation [92]."
+    },
+    {
+      "id": "E16D",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "75% or 50% of the images for training with every 4th or every 2nd frame held out for testing, respectively."
+    },
+    {
+      "id": "E17",
+      "section": "4.1. Experimental Setup",
+      "page": 7,
+      "content": "peak signal-to-noise ratio (PSNR), structural similarity index (SSIM) and learned perceptual image patch similarity (LPIPS)"
+    },
+    {
+      "id": "E17A",
+      "section": "4.1. Experimental Setup",
+      "page": 7,
+      "content": "by projecting their ground truth 3D bounding boxes onto the 2D image plane and calculating pixel loss within these regions."
+    },
+    {
+      "id": "E18",
+      "section": "3.5. Optimization Objective / Table 1",
+      "page": 6,
+      "content": "<tr><td>Ours</td><td>2D tracker</td><td>32.56</td><td>0.936</td><td>0.059</td><td>28.51</td><td>0.868</td><td>28.85</td><td>0.867</td><td>0.088</td><td>25.58</td><td>0.779</td></tr>"
+    },
+    {
+      "id": "E19",
+      "section": "4.2. Comparisons with the State-of-the-art",
+      "page": 7,
+      "content": "On the NOTR dataset, our method outperforms all competitors across every metric, as shown in Table 1."
+    },
+    {
+      "id": "E19A",
+      "section": "4.2. Comparisons with the State-of-the-art",
+      "page": 7,
+      "content": "our method outperforms S3Gaussian [32] by 2.66 dB in DPSNR and 0.099 in DSSIM for novel view synthesis."
+    },
+    {
+      "id": "E19B",
+      "section": "4.2. Comparisons with the State-of-the-art",
+      "page": 7,
+      "content": "It also surpasses Street Gaussians [91] by 1.87 dB in PSNR"
+    },
+    {
+      "id": "E20",
+      "section": "4.2. Comparisons with the State-of-the-art / Table 2",
+      "page": 8,
+      "content": "| Ours | 2D tracker [84] | 25.49 | 0.889 | 0.063 | 25.11 | 0.877 | 0.067 |"
+    },
+    {
+      "id": "E21",
+      "section": "4.2. Comparisons with the State-of-the-art",
+      "page": 8,
+      "content": "a 0.045 higher SSIM and a 0.018 lower LPIPS compared to Street Gaussians, although its PSNR is 0.3 dB lower."
+    },
+    {
+      "id": "E22",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "we use pretrained weights from nuScenes [6]"
+    },
+    {
+      "id": "E22A",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "which have not been trained on the Waymo or KITTI datasets."
+    },
+    {
+      "id": "E22B",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "Please note that Street Gaussians leverages GT tracking annotations on KITTI dataset."
+    },
+    {
+      "id": "E22C",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "For the KITTI dataset, we borrow the results of all other methods from Street Gaussians."
+    },
+    {
+      "id": "E23",
+      "section": "4.2. Comparisons with the State-of-the-art / Table 3",
+      "page": 8,
+      "content": "| A | w/o track | 25.25 | 0.761 | 21.71 | 0.662 |"
+    },
+    {
+      "id": "E23A",
+      "section": "4.2. Comparisons with the State-of-the-art / Table 3",
+      "page": 8,
+      "content": "| B | w/o L<sub>motion</sub> | 28.39 | 0.843 | 24.54 | 0.719 |"
+    },
+    {
+      "id": "E23B",
+      "section": "4.2. Comparisons with the State-of-the-art / Table 3",
+      "page": 8,
+      "content": "| F | GT pose | 28.98 | 0.873 | 25.71 | 0.787 |"
+    },
+    {
+      "id": "E24",
+      "section": "12. Details of Loss Functions / Table 7",
+      "page": 15,
+      "content": "| 2D tracker + rigid transformation | 27.69 | 0.850 | 25.04 | 0.758 |"
+    },
+    {
+      "id": "E24A",
+      "section": "12. Details of Loss Functions / Table 7",
+      "page": 15,
+      "content": "| Ours (2D tracker + HexPlane) | 28.85 | 0.867 | 25.58 | 0.779 |"
+    },
+    {
+      "id": "E25",
+      "section": "6. Evaluation on Static Scenes in Waymo-NOTR Dataset",
+      "page": 14,
+      "content": "| Ours | 28.72 | 0.857 | 0.092 |"
+    },
+    {
+      "id": "E25A",
+      "section": "6. Evaluation on Static Scenes in Waymo-NOTR Dataset",
+      "page": 14,
+      "content": "| EmerNeRF [92] | 28.89 | 0.814 | 0.212 |"
+    },
+    {
+      "id": "E26",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "All experiments are run on a single NVIDIA RTX 3090 GPU, with training taking about 2 hours per video clip"
+    },
+    {
+      "id": "E26A",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "inference speed at 100 FPS at 960 × 640 resolution."
+    },
+    {
+      "id": "E27",
+      "section": "13. Limitation and Failure Cases",
+      "page": 15,
+      "content": "Our approach primarily focuses on modeling moving vehicles while using 4DGS [81] to model humans without explicit motion guidance."
+    },
+    {
+      "id": "E27A",
+      "section": "13. Limitation and Failure Cases",
+      "page": 15,
+      "content": "This leads to inaccurate human motion in some cases"
+    },
+    {
+      "id": "E28",
+      "section": "13. Limitation and Failure Cases",
+      "page": 15,
+      "content": "Dynamic objects beyond humans and vehicles, such as animals and traffic lights, are currently treated as static objects."
+    },
+    {
+      "id": "E29",
+      "section": "13. Limitation and Failure Cases",
+      "page": 16,
+      "content": "The proposed method requires per-scene optimization."
+    },
+    {
+      "id": "E30",
+      "section": "References",
+      "page": 12,
+      "content": "Street gaussians: Modeling dynamic urban scenes with gaussian splatting."
+    },
+    {
+      "id": "E31",
+      "section": "References",
+      "page": 10,
+      "content": "S3gaussian: Self-supervised street gaussians for autonomous driving. arXiv preprint arXiv:2405.20323, 2024."
+    },
+    {
+      "id": "E32",
+      "section": "References",
+      "page": 9,
+      "content": "Hexplane: A fast representation for dynamic scenes."
+    },
+    {
+      "id": "E33",
+      "section": "References",
+      "page": 12,
+      "content": "4d gaussian splatting for real-time dynamic scene rendering."
+    },
+    {
+      "id": "E34",
+      "section": "References",
+      "page": 12,
+      "content": "Dynamic gaussian marbles for novel view synthesis of casual monocular videos. arXiv preprint arXiv:2406.18717, 2024."
+    },
+    {
+      "id": "E35",
+      "section": "References",
+      "page": 12,
+      "content": "General object foundation model for images and videos at scale."
+    },
+    {
+      "id": "E36",
+      "section": "References",
+      "page": 12,
+      "content": "Emernerf: Emergent spatialtemporal scene decomposition via self-supervision. arXiv preprint arXiv:2311.02077, 2023."
+    },
+    {
+      "id": "E37",
+      "section": "1. Introduction",
+      "page": 2,
+      "content": "we leverage HexPlane representation [7] following 4DGS [81]."
+    },
+    {
+      "id": "E38",
+      "section": "4.1. Experimental Setup",
+      "page": 6,
+      "content": "including NeRF-based methods (MARS [85], NSG [65], EmerNeRF [92]) and Gaussian-based methods (3DGS [37], StreetGaussian [91], S3Gaussian [32])."
+    },
+    {
+      "id": "E39",
+      "section": "3.2. Overview",
+      "page": 3,
+      "content": "from multiple cameras placed around the vehicle"
+    },
+    {
+      "id": "E39A",
+      "section": "3.2. Overview",
+      "page": 3,
+      "content": "Additionally, a top-mounted LiDAR provides 3D point clouds"
+    },
+    {
+      "id": "E40",
+      "section": "3.2. Overview",
+      "page": 4,
+      "content": "desired camera pose and time frame, without reliance on 3D object trackers or ground truth object trajectories."
+    },
+    {
+      "id": "E41",
+      "section": "3.2. Overview",
+      "page": 4,
+      "content": "Finally, novel view synthesis is performed by splatting the deformed Gaussian onto the image plane."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "Street gaussians: Modeling dynamic urban scenes with gaussian splatting",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "主要比较基线，使用跟踪位姿建模动态车辆；本文同时比较其刚体变换运动建模。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E30",
+        "E38",
+        "E24"
+      ]
+    },
+    {
+      "title": "S3gaussian: Self-supervised street gaussians for autonomous driving",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "无额外轨迹输入的高斯街景比较方法；本文强调加入显式运动引导。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2405.20323",
+      "url": "",
+      "evidence_ids": [
+        "E31",
+        "E38",
+        "E19A"
+      ]
+    },
+    {
+      "title": "Hexplane: A fast representation for dynamic scenes",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "本文使用其平面分解表示存储时空运动特征。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E32",
+        "E37",
+        "E09"
+      ]
+    },
+    {
+      "title": "4d gaussian splatting for real-time dynamic scene rendering",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "本文沿用其HexPlane运动表示，并加入初始轨迹监督。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E33",
+        "E37",
+        "E11"
+      ]
+    },
+    {
+      "title": "Dynamic gaussian marbles for novel view synthesis of casual monocular videos",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "本文采用其各向同性Gaussian marbles约束动态点的自由度。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2406.18717",
+      "url": "",
+      "evidence_ids": [
+        "E34",
+        "E12"
+      ]
+    },
+    {
+      "title": "General object foundation model for images and videos at scale",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "其GLEE模型提供本文车辆2D跟踪与掩码轨迹。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E35",
+        "E05"
+      ]
+    },
+    {
+      "title": "Emernerf: Emergent spatialtemporal scene decomposition via self-supervision",
+      "paper_id": null,
+      "relation_type": "baseline",
+      "description": "NeRF比较基线，本文也沿用其Waymo-NOTR实验设置。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2311.02077",
+      "url": "",
+      "evidence_ids": [
+        "E36",
+        "E38",
+        "E16C"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F3",
+      "caption": "Figure 2. Overview of our method. To overcome the limited generalization of 3D object trackers, we introduce a robust object tracking module based on a 2D object tracker [84]. We integrate 2D tracking with LiDAR data to segment the object’s point cloud and incrementally reconstruct the object model in canonical space frame-by-frame. The canonical model is used to estimate object pose $\\mathbf { T } _ { t }$ and serves as the initialization for Gaussian optimization. We model dynamic objects with isotropic Gaussian marble [74] to simplify optimization. Our approach learns point motion within the HexPlane [7] feature space, enabling tracking error correction and missed detection recovery. Decoders $D _ { \\mathcal { X } } , D _ { \\mathcal { C } }$ predict point motion $\\Delta \\mathcal { X } _ { t }$ and color change $\\Delta \\mathcal { C } _ { t }$ based on the HexPlane features $f ( x , y , z , t )$ , with the predicted trajectory providing supervision. Finally, novel view synthesis is performed by splatting the deformed Gaussian onto the image plane.",
+      "description": "整体方法流程图。左侧以t=0、t=20、t=50展示2D车辆跟踪、分割点云、规范化与逐帧注册，底部加号表示物体模型的累积融合；估计位姿形成Initial Trajectory，物体模型经Initialize箭头初始化Gaussian Marble。中部以位置与时间查询HexPlane Feature Grid得到特征，随后分为位置和颜色两个解码分支，输出运动偏移与颜色变化并形成Deformed Gaussian。初始轨迹经标注为Supervision的连线提供运动监督，右侧箭头连接新视角合成。该图集中呈现点云初始化、轨迹引导和隐式运动学习之间的关系；纠错与漏检恢复是图注及正文提出的能力主张。",
+      "page": 4,
+      "path": "/paper-assets/street-gaussians-without-3d-object-tracker-2025/f3.webp",
+      "type": "method_overview"
+    }
+  ],
+  "tags": [],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T13:49:21+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.2",
+    "source_hash": "19954d26a22ce453fb10d45a92c53abeaaba453a18b3753f1e8c25a71ba4d524",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}

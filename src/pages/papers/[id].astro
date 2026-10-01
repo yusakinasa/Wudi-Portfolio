@@ -1,0 +1,82 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PaperTags from '../../components/papers/PaperTags.astro';
+import PaperTagTools from '../../components/papers/PaperTagTools.astro';
+import PaperFigures from '../../components/papers/PaperFigures.astro';
+import { loadPapers, paperIndex, metadataLinks, relatedLink, type Paper, type PaperSummary } from '../../lib/papers';
+import '../../styles/papers.css';
+
+export function getStaticPaths() {
+  const papers = loadPapers();
+  const rows = paperIndex(papers).papers;
+  return papers.map(paper => ({ params: { id: paper.id }, props: { paper, rows } }));
+}
+interface Props { paper: Paper; rows: PaperSummary[] }
+const { paper, rows } = Astro.props as Props;
+const m = paper.metadata;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const overview = [['研究问题 / Research problem', paper.overview.research_problem], ['研究动机 / Motivation', paper.overview.motivation], ['核心思想 / Core idea', paper.overview.core_idea]];
+const experiments = [['Datasets', paper.experiments.datasets], ['Benchmarks', paper.experiments.benchmarks], ['Metrics', paper.experiments.metrics], ['Baselines', paper.experiments.baselines]] as const;
+const diagrams = paper.figures.filter(f => ['concept_overview', 'architecture', 'method_overview'].includes(f.type)).slice(0, 3);
+const sections = [['overview', 'Overview'], ['figures', 'Key diagrams'], ['contributions', 'Contributions'], ['method', 'Method'], ['experiments', 'Experiments'], ['limitations', 'Limitations'], ['related', 'Related papers'], ['interpretation', 'AI interpretation']];
+---
+<BaseLayout title={m.short_title || m.title} description={paper.overview.one_sentence} lang="zh-CN">
+  <article class="container paper-detail">
+    <header class="paper-header">
+      <a class="text-link" href={`${base}/papers/`}>← Paper Library</a>
+      <p class="eyebrow">{m.short_title || 'Paper'} · {m.year ?? 'Year not stated'}{m.venue && ` · ${m.venue}`}</p>
+      <h1>{m.title}</h1>
+      <p class="paper-authors">{m.authors.join(', ') || 'Authors not explicitly stated'}</p>
+      <div class="paper-links">{metadataLinks(paper).map(([label, url]) => <a class="text-link" href={url} target="_blank" rel="noopener noreferrer">{label} ↗</a>)}</div>
+      {m.zotero.item_key && <p class="paper-provenance">Zotero item: <code>{m.zotero.item_key}</code> · library {m.zotero.library_id}</p>}
+      <PaperTags id={paper.id} title={m.title} />
+      <PaperTagTools />
+      <p class="paper-fact-note">以下内容为基于原文的结构化分析；AI 解释单独标注。</p>
+    </header>
+    <nav class="paper-section-nav" aria-label="Paper sections">{sections.map(([id, label]) => <a href={`#${id}`}>{label}</a>)}</nav>
+    <div class="paper-body">
+      <section id="overview" class="paper-section">
+        <h2>Overview</h2>
+        <p class="paper-one-sentence">{paper.overview.one_sentence}</p>
+        {paper.overview.abstract && <details class="paper-abstract"><summary>摘要 / Abstract summary</summary><p>{paper.overview.abstract}</p></details>}
+        <dl class="paper-overview">{overview.map(([label, value]) => <div><dt>{label}</dt><dd>{value || 'not explicitly stated'}</dd></div>)}</dl>
+      </section>
+      <section id="figures" class="paper-section paper-key-diagrams">
+        <h2>关键概念与架构图 / Key diagrams</h2>
+        <p class="paper-provenance">优先展示论文前半部分最重要的 1–3 张概念总览、模型架构或方法流程图，不包含实验结果图。点击图片可放大查看。</p>
+        <PaperFigures figures={diagrams} />
+        {!diagrams.length && <p class="paper-missing">暂未提取到可可靠核实的关键图。旧记录可重新分析以补充；没有合适图时不会用结果图凑数。</p>}
+      </section>
+      <section id="contributions" class="paper-section">
+        <h2>Contributions</h2>
+        <div class="paper-contributions">{paper.contributions.map(item => <div class="paper-contribution"><p class="note-category">{item.id}</p><h3>{item.title}</h3><p>{item.description}</p></div>)}</div>
+        {!paper.contributions.length && <p class="paper-missing">not explicitly stated</p>}
+      </section>
+      <section id="method" class="paper-section">
+        <h2>Method</h2>
+        <p>{paper.overview.method_summary || paper.method.details || 'not explicitly stated'}</p>
+        <div class="paper-io">{[['Inputs', paper.method.inputs], ['Outputs', paper.method.outputs]].map(([label, values]) => <div><h3>{label}</h3><ul>{(values as string[]).map(value => <li>{value}</li>)}</ul>{!(values as string[]).length && <p class="paper-missing">not explicitly stated</p>}</div>)}</div>
+        {paper.method.components.length > 0 && <><h3>Components</h3><dl class="paper-components">{paper.method.components.map(component => <div><dt>{component.name}</dt><dd>{component.description}</dd></div>)}</dl></>}
+        {paper.method.pipeline.length > 0 && <><h3>Pipeline</h3><ol class="paper-pipeline">{paper.method.pipeline.map(step => <li>{step}</li>)}</ol></>}
+        {paper.method.details && <p>{paper.method.details}</p>}
+      </section>
+      <section id="experiments" class="paper-section">
+        <h2>Experiments</h2>
+        <dl class="paper-experiment-grid">{experiments.map(([label, values]) => <div><dt>{label}</dt><dd>{values.join(' · ') || 'not explicitly stated'}</dd></div>)}</dl>
+        <h3>Key results</h3><ul class="paper-claims">{paper.experiments.main_results.map(result => <li>{result.text}</li>)}</ul>
+        {!paper.experiments.main_results.length && <p class="paper-missing">not explicitly stated</p>}
+      </section>
+      <section id="limitations" class="paper-section"><h2>Limitations</h2><p class="paper-provenance">仅列出论文明确说明的局限性。</p><ul class="paper-claims">{paper.limitations.map(item => <li>{item.text}</li>)}</ul>{!paper.limitations.length && <p class="paper-missing">not explicitly stated</p>}</section>
+      <section id="related" class="paper-section">
+        <h2>Related Papers</h2>
+        <div class="paper-related">{paper.related_papers.map(item => {
+          const link = relatedLink(item, rows, base);
+          return <article><p class="note-category">{item.relation_type} · {item.source}</p><h3>{link ? <a href={link.href} target={link.internal ? undefined : '_blank'} rel={link.internal ? undefined : 'noopener noreferrer'}>{item.title} {link.internal ? '→' : '↗'}</a> : item.title}</h3><p>{item.description}</p><small>{link ? link.internal ? '已收录 · 站内详情' : '外部文献' : '原文未提供可核实链接'}</small></article>;
+        })}</div>
+        {!paper.related_papers.length && <p class="paper-missing">No source-grounded related papers recorded.</p>}
+      </section>
+      <section id="interpretation" class="paper-section paper-interpretation"><p class="note-category">AI interpretation · 非论文事实</p><h2>阅读思考</h2><p>{paper.interpretation.summary || '暂无额外解释。'}</p><ul>{paper.interpretation.open_questions.map(question => <li>{question}</li>)}</ul></section>
+    </div>
+    <footer class="paper-analysis-meta"><p>Analyzer {paper.analysis_meta.analyzer} · {paper.analysis_meta.analyzed_at} · Schema {paper.schema_version} · Prompt {paper.analysis_meta.prompt_version}</p><p>AI 分析可能存在遗漏或解释偏差，重要结论请核对原文。本站不保存原始 PDF。</p></footer>
+  </article>
+</BaseLayout>

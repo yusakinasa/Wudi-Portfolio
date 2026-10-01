@@ -2,3 +2,17 @@ node_modules/
 dist/
 .astro/
 .DS_Store
+src/generated/finances.json
+__pycache__/
+.cache/
+# Existing MinerU managed server may write its parsed artifact blobs in launch cwd.
+/blobs/
+.venv-papers/
+.env
+.env.*
+!.env.example
+data/papers/*.tmp
+data/papers/*.lock
+public/paper-assets/.staging-*/
+data/papers/.transaction.json
+data/papers/.paper-*.tmp

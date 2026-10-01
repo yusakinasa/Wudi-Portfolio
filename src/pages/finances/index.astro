@@ -1,0 +1,134 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import settings from '../../../data/finances.json';
+import ledger from '../../generated/finances.json';
+import { money, monthLabel, summarize, inMonth, monthCoverage, type ExpenseDay } from '../../lib/finances';
+import '../../styles/finances.css';
+
+const records: ExpenseDay[] = ledger.records;
+const summary = summarize(records);
+const months = [...new Set(records.map(row => row.date.slice(0, 7)))].sort();
+const peak = summary.peak!;
+const largest = [...settings.categories].sort((a, b) => summary.categories[b.key as keyof typeof summary.categories] - summary.categories[a.key as keyof typeof summary.categories])[0];
+const largestAmount = summary.categories[largest.key as keyof typeof summary.categories];
+const chartMax = Math.max(...records.map(row => row.total), 1);
+const payload = JSON.stringify({ records, categories: settings.categories }).replace(/</g, '\\u003c');
+---
+
+<BaseLayout title={settings.title} description={settings.description} lang="zh-CN">
+  <section class="page-heading" aria-labelledby="finance-title">
+    <div class="container page-heading-inner">
+      <div><p class="eyebrow">个人账本 · 支出记录</p><h1 id="finance-title">{settings.title}</h1></div>
+      <p>{settings.description}</p>
+    </div>
+  </section>
+
+  <div class="container finance-page" data-finances>
+    <div class="finance-meta">
+      <p>{settings.scope}</p>
+      <p>记录范围 <time datetime={records[0].date}>{records[0].date}</time> — <time datetime={records.at(-1)!.date}>{records.at(-1)!.date}</time></p>
+    </div>
+
+    <div class="finance-controls" aria-label="筛选财务记录">
+      <label>月份<select data-month><option value="all">全部月份</option>{months.map(month => <option value={month}>{monthLabel(month)}</option>)}</select></label>
+      <label>支出类别<select data-category><option value="all">全部类别</option>{settings.categories.map(category => <option value={category.key}>{category.label}</option>)}</select></label>
+      <button type="button" class="finance-reset" data-reset>重置筛选 ↺</button>
+    </div>
+    <noscript><p class="finance-footnote">当前显示完整账本，开启 JavaScript 可使用筛选与导出。</p></noscript>
+
+    <section aria-label="支出概览">
+      <p class="finance-period" data-period aria-live="polite">全部月份 · 全部类别 · 已记录 {summary.days} 天</p>
+      <div class="finance-stats">
+        <div><p>累计支出</p><strong data-total>{money(summary.total)}</strong><small>当前月份 / 类别</small></div>
+        <div><p>日均支出</p><strong data-average>{money(summary.average)}</strong><small>按已记录天数计算，包含零支出日</small></div>
+        <div><p>日支出中位数</p><strong data-median>{money(summary.median)}</strong><small>有一半的记录日支出不超过此值</small></div>
+        <div><p>单日最高</p><strong data-peak>{money(peak.total)}</strong><small data-peak-date>{peak.date}{peak.note ? ` · ${peak.note}` : ''}</small></div>
+      </div>
+    </section>
+
+    <section class="finance-section" aria-labelledby="composition-title">
+      <div class="finance-section-heading"><h2 id="composition-title">钱花在哪里</h2><p>所选月份的完整支出构成</p></div>
+      <div class="finance-composition">
+        <ul class="finance-category-bars">
+          {settings.categories.map(category => {
+            const amount = summary.categories[category.key as keyof typeof summary.categories];
+            const share = summary.total ? amount / summary.total * 100 : 0;
+            return <li data-composition={category.key}>
+              <div><span>{category.label}</span><span><strong data-category-amount>{money(amount)}</strong><small data-category-share>{share.toFixed(1)}%</small></span></div>
+              <div class="finance-track" aria-hidden="true"><span class:list={['finance-fill', `finance-fill-${category.key}`]} style={`width:${share}%`}></span></div>
+            </li>;
+          })}
+        </ul>
+        <div class="finance-observation">
+          <p class="eyebrow">支出观察</p>
+          <p data-insight>餐饮占总支出的 {(largestAmount / summary.total * 100).toFixed(1)}%，是当前最大的支出类别。</p>
+          <p data-peak-insight>支出最高的一天是 {peak.date}，共 {money(peak.total)}。</p>
+          <p class="finance-footnote">备注描述的是当天事件，不能据此把整天支出都归因于一个项目。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="finance-section" aria-labelledby="daily-title">
+      <div class="finance-section-heading"><h2 id="daily-title">每日支出</h2><p>按当前月份和类别查看波动</p></div>
+      <div class="finance-chart-scroll" tabindex="0" aria-label="每日支出柱状图，可横向滚动；精确金额见下方账本">
+        <div class="finance-daily-chart" data-chart>
+          {records.map(row => <div class="finance-day" title={`${row.date}：${money(row.total)}${row.note ? ` · ${row.note}` : ''}`}>
+            <div class="finance-day-bar"><span style={`height:${row.total / chartMax * 100}%`}></span></div>
+            <span>{row.date.slice(5)}</span>
+            <span class="sr-only">{money(row.total)}</span>
+          </div>)}
+        </div>
+      </div>
+      <p class="finance-footnote">仅展示有记录的日期。未记录日期不补为零；空白分类金额显示为“—”，计算合计时不计入。明确填写的 0 保留为零支出。</p>
+    </section>
+
+    <section class="finance-section" aria-labelledby="monthly-title">
+      <div class="finance-section-heading"><h2 id="monthly-title">月度回看</h2><p>每月全部类别 · 不随类别筛选改变</p></div>
+      <div class="finance-table-scroll" tabindex="0" aria-label="月度支出汇总">
+        <table class="finance-table finance-month-table">
+          <thead><tr><th scope="col">月份</th><th scope="col">记录覆盖</th><th scope="col">总支出</th><th scope="col">日均</th>{settings.categories.map(category => <th scope="col">{category.label}</th>)}</tr></thead>
+          <tbody>{months.map(month => {
+            const rows = inMonth(records, month);
+            const stats = summarize(rows);
+            const coverage = monthCoverage(records, month);
+            return <tr>
+              <th scope="row"><button type="button" class="finance-month-link" data-pick-month={month}>{monthLabel(month)} ↗</button></th>
+              <td>{coverage.recorded}/{coverage.days} 天 <span class="finance-coverage">{coverage.complete ? '完整' : '部分记录'}</span></td>
+              <td>{money(stats.total)}</td><td>{money(stats.average)}</td>
+              {settings.categories.map(category => <td>{money(stats.categories[category.key as keyof typeof stats.categories])}</td>)}
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+      <p class="finance-footnote">记录天数不同，总额不直接代表消费水平的变化。日均也会受到聚餐、充值等集中支出的影响。</p>
+    </section>
+
+    <section class="finance-section" aria-labelledby="ledger-title">
+      <div class="finance-section-heading"><h2 id="ledger-title">逐日账本</h2><button class="finance-export" type="button" data-export>导出当前明细 ↓ CSV</button></div>
+      <div class="finance-ledger-controls">
+        <label>搜索日期或备注<input type="search" data-search placeholder="例如：2026-09、聚餐、回洪湖" /></label>
+        <label>排序<select data-sort><option value="date-desc">日期：最新在前</option><option value="date-asc">日期：最早在前</option><option value="amount-desc">金额：从高到低</option><option value="amount-asc">金额：从低到高</option></select></label>
+      </div>
+      <p class="finance-footnote" data-result-count aria-live="polite">共 {records.length} 天。搜索仅筛选明细，不改变上方分析。</p>
+      <div class="finance-table-scroll finance-ledger-scroll" tabindex="0" aria-label="逐日支出明细">
+        <table class="finance-table">
+          <caption class="sr-only">金额单位：人民币。空白分类显示为破折号。</caption>
+          <thead><tr><th scope="col">日期</th>{settings.categories.map(category => <th scope="col">{category.label}</th>)}<th scope="col">当天总计</th><th scope="col">备注</th></tr></thead>
+          <tbody data-ledger>{[...records].reverse().map(row => <tr>
+            <th scope="row"><time datetime={row.date}>{row.date}</time></th>
+            {settings.categories.map(category => { const amount = row[category.key as 'food' | 'transport' | 'other']; return <td>{amount === null ? '—' : money(amount)}</td>; })}
+            <td class="finance-total-cell">{money(row.total)}</td><td class="finance-note-cell">{row.note || '—'}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+      <p class="finance-empty" data-empty hidden>没有符合条件的记录，试试更换筛选条件或清空搜索。</p>
+    </section>
+
+    <p class="finance-footnote finance-closing">收入、结余和储蓄率暂未统计。当前账本记录的是付款金额，充值在支付当天计入支出。</p>
+    <script is:inline type="application/json" data-finance-data set:html={payload}></script>
+  </div>
+  <script>
+    import { initializeFinances } from '../../lib/finances-client';
+    initializeFinances();
+  </script>
+</BaseLayout>

@@ -1,0 +1,10 @@
+{
+  "title": "Finances",
+  "description": "记录日常开销，看清钱花在哪里，也为之后的财务复盘留一份依据。",
+  "scope": "目前仅记录支出，收入尚未记录。金额单位为人民币。",
+  "categories": [
+    { "key": "food", "label": "餐饮" },
+    { "key": "transport", "label": "交通" },
+    { "key": "other", "label": "其他" }
+  ]
+}

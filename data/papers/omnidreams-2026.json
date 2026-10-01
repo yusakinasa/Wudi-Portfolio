@@ -1,0 +1,940 @@
+{
+  "schema_version": "1.0",
+  "id": "omnidreams-2026",
+  "metadata": {
+    "title": "NVIDIA OmniDreams: Real-Time Generative World Model for Closed-Loop Autonomous Vehicle Simulation",
+    "short_title": "OmniDreams",
+    "authors": [
+      "Aarti Basant",
+      "Amlan Kar",
+      "Despoina Paschalidou",
+      "Fangyin Wei",
+      "Francesco Ferroni",
+      "Guillermo Garcia Cobo",
+      "Haithem Turki",
+      "Huan Ling",
+      "Jaewoo Seo",
+      "James Lucas",
+      "Jay Zhangjie Wu",
+      "Jialiang Wang",
+      "Jonathan Lorraine",
+      "Jun Gao",
+      "Kai He",
+      "Katarina Tothova",
+      "Kevin Xie",
+      "Michał Tyszkiewicz",
+      "Qi Wu",
+      "Riccardo de Lutio",
+      "Ruilong Li",
+      "Sanja Fidler",
+      "Seung Wook Kim",
+      "Tianchang Shen",
+      "Tianshi Cao",
+      "Tobias Pfaff",
+      "William Lew",
+      "Xindi Wu",
+      "Xuanchi Ren",
+      "Yifan Lu",
+      "Yuxuan Zhang",
+      "Zan Gojcic",
+      "Zian Wang"
+    ],
+    "year": 2026,
+    "venue": "arXiv",
+    "doi": "",
+    "arxiv_id": "2606.03159",
+    "paper_url": "",
+    "pdf_url": "",
+    "project_url": "",
+    "code_url": "https://github.com/nv-tlabs/omni-dreams",
+    "zotero": {
+      "item_key": "",
+      "library_id": "",
+      "collections": []
+    }
+  },
+  "overview": {
+    "abstract": "论文提出 OmniDreams，将 Cosmos 视频基础模型适配为实时、动作条件化的自回归驾驶世界模型。模型利用约两万小时驾驶数据，结合模拟器抽象状态、文本、首帧图像和历史缓存生成摄像头观测，并接入 AlpaSim 与驾驶策略构成闭环。论文展示单视角和多视角实时生成、长时序稳定性与可控场景变化；另外报告将其后训练为 World-Action Model 的初步结果，以及用于修复重建渲染伪影的扩展。",
+    "one_sentence": "OmniDreams 通过因果视频扩散、流式 KV 缓存、少步蒸馏和模拟器集成，实现面向自动驾驶闭环评估的实时生成式摄像头仿真。",
+    "research_problem": "如何在安全关键、长尾驾驶场景中，让仿真环境随策略动作及时更新，并持续生成可用于闭环评估的逼真摄像头观测。",
+    "motivation": "重建式仿真受原始采集场景限制，难以扩展至未捕获区域、新场景内容和显著变化的环境条件。",
+    "core_idea": "以 Cosmos 为基础，采用因果自回归扩散，根据动作更新后的结构化世界状态和视觉历史生成下一段观测；通过历史缓存和少步蒸馏兼顾交互速度与时序稳定性。",
+    "method_summary": "结构化状态编码为控制 tokens，与视觉 tokens 一起输入因果 DiT；文本提供外观条件，KV 缓存提供历史。多视角版本分离视角内时间注意力和同时间跨视角注意力。训练采用 Diffusion Forcing、Self Forcing 与渐进长上下文教师，部署采用固定窗口缓存和有状态视频服务。",
+    "evidence_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E06",
+      "E08",
+      "E09",
+      "E10",
+      "E13",
+      "E14",
+      "E16",
+      "E22",
+      "E26",
+      "E45"
+    ]
+  },
+  "contributions": [
+    {
+      "id": "C1",
+      "title": "面向闭环驾驶的条件化视频世界模型",
+      "description": "将 Cosmos 适配为动作条件化的因果视频生成模型，以文本、模拟器抽象状态、首帧与历史缓存生成观测，并提供单视角和四视角版本。",
+      "evidence_ids": [
+        "E01",
+        "E06",
+        "E07",
+        "E11",
+        "E12",
+        "E45"
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "兼顾少步生成与长时序稳定性的训练流程",
+      "description": "采用 Diffusion Forcing 转换因果生成，使用 Self Forcing 蒸馏进行两步采样，并以长上下文双向教师继续训练，缓解长滚动中的漂移伪影。",
+      "evidence_ids": [
+        "E13",
+        "E14",
+        "E15",
+        "E16",
+        "E33",
+        "E34"
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "实时推理与有状态闭环服务",
+      "description": "通过局部时间窗口、静态形状 KV 缓存及异步缓存维护，实现实时分块生成；以 gRPC 有状态服务接入 AlpaSim，并将通用推理方案封装为 FlashDreams。",
+      "evidence_ids": [
+        "E17",
+        "E18",
+        "E19",
+        "E20",
+        "E21",
+        "E22",
+        "E44"
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "从世界模型转为驾驶策略的初步验证",
+      "description": "将因果骨干后训练为 World-Action Model，联合学习视频和轨迹去噪；在指定 NuRec 数据集闭环协议下，相比 Alpamayo 1.5 报告更低碰撞率，同时使用约五分之一参数。",
+      "evidence_ids": [
+        "E24",
+        "E25",
+        "E26",
+        "E27"
+      ]
+    },
+    {
+      "id": "C5",
+      "title": "重建伪影修复扩展",
+      "description": "将蒸馏后的自回归模型进一步训练为修复模块，从退化重建图像开始去噪，利用因果历史改善重建渲染中的新视角伪影。",
+      "evidence_ids": [
+        "E43"
+      ]
+    }
+  ],
+  "method": {
+    "inputs": [
+      "初始化用首帧 RGB 图像",
+      "描述天气、光照和时间等环境属性的文本提示",
+      "由模拟器提供的抽象世界状态，包括道路结构和动态参与者表示，并体现驾驶动作",
+      "保存历史生成信息的流式 KV 缓存"
+    ],
+    "outputs": [
+      "OmniDreams-SV：每步生成 8 帧单视角 RGB 观测，对应 2 个潜在帧",
+      "OmniDreams-MV：每步联合生成四个同步视角的 16 帧观测，对应 4 个潜在帧",
+      "WAM 扩展：预测未来 6.4 秒、10 Hz 的自车轨迹，共 64 个路径点",
+      "Diffusion Fixer 扩展：修复后的重建渲染图像"
+    ],
+    "components": [
+      {
+        "name": "结构化条件注入",
+        "description": "小型 MLP 将模拟器状态编码为紧凑控制 tokens，与视觉 tokens 对齐并拼接后输入 Transformer；首帧用于初始化，文本和历史提供生成条件。",
+        "evidence_ids": [
+          "E06",
+          "E07",
+          "E08"
+        ]
+      },
+      {
+        "name": "因果生成与历史缓存",
+        "description": "各视角独立进行时间注意力，通过因果 KV 缓存访问历史。推理窗口为 SV 的 6 个潜在帧或 MV 的 8 个潜在帧，缓存预分配并保持静态形状。",
+        "evidence_ids": [
+          "E09",
+          "E17",
+          "E18"
+        ]
+      },
+      {
+        "name": "多视角注意力",
+        "description": "多视角版本在每个时间步进行跨视角注意力，结合视角内时间注意力协调同步摄像头生成。",
+        "evidence_ids": [
+          "E09",
+          "E10",
+          "E12"
+        ]
+      },
+      {
+        "name": "因果适配与蒸馏",
+        "description": "Diffusion Forcing 配合因果掩码，将双向模型转为自回归模型；Self Forcing 以自身生成历史进行训练，并结合视频级分布匹配目标。实际采样使用两步，随后以长上下文双向教师继续蒸馏。",
+        "evidence_ids": [
+          "E13",
+          "E14",
+          "E15",
+          "E16",
+          "E50"
+        ]
+      },
+      {
+        "name": "视频服务与 AlpaSim 闭环",
+        "description": "有状态视频服务通过 gRPC 与客户端通信。模拟器提供更新后的状态，服务生成分块观测并维护缓存。AlpaSim 使用 pre-fetch，在推进仿真时钟前请求视频；块内轨迹提前确定。",
+        "evidence_ids": [
+          "E19",
+          "E22",
+          "E23",
+          "E46"
+        ]
+      },
+      {
+        "name": "World-Action Model",
+        "description": "将因果视频骨干转为轨迹预测模型，联合优化视频与轨迹潜变量的 flow matching 损失，输出 64 个未来路径点。",
+        "evidence_ids": [
+          "E24"
+        ]
+      },
+      {
+        "name": "Diffusion Fixer",
+        "description": "修复变体从退化重建渲染而非随机噪声开始去噪，并使用因果历史与 KV 缓存维持修复输出的时序一致性。",
+        "evidence_ids": [
+          "E43"
+        ]
+      }
+    ],
+    "pipeline": [
+      "使用 RDS 和 RDS-HQ-1M 对 Cosmos 基础模型进行驾驶领域适配与后训练。",
+      "通过因果训练和 Self Forcing 蒸馏得到少步自回归生成模型，再以长上下文教师改善长滚动稳定性。",
+      "以首帧图像和文本初始化生成会话及历史缓存。",
+      "驾驶策略输出轨迹，AlpaSim 更新并提供对应的抽象世界状态。",
+      "编码条件，经因果 DiT 两步去噪并解码为 RGB 观测，同时在旁路线程维护 KV 缓存。",
+      "将观测返回策略，在下一视频块边界重复闭环。"
+    ],
+    "details": "主模型训练使用 RDS 的 16,600 小时及 RDS-HQ-1M 的 4,944 小时驾驶数据。SV 和 MV 分别以 8 帧和 16 帧为生成块；块内策略与交通轨迹不能随意修改，否则整个生成块失效。部署性能报告基于 704×1280 分辨率的少步模型。",
+    "evidence_ids": [
+      "E04",
+      "E06",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14",
+      "E15",
+      "E16",
+      "E17",
+      "E18",
+      "E19",
+      "E20",
+      "E21",
+      "E22",
+      "E23",
+      "E24",
+      "E43",
+      "E45",
+      "E46",
+      "E50"
+    ]
+  },
+  "experiments": {
+    "datasets": [
+      "Real Driving Scene (RDS)：中期训练数据，16,600 小时、3M clips",
+      "RDS-HQ-1M：后训练与微调数据，4,944 小时、1,142,285 clips；留出 5,000 clips",
+      "RDS-HQ-1M 留出集中的 1,000 clips：生成质量定量评估",
+      "Physical AI Autonomous Vehicles NuRec dataset：WAM 比较使用 574 scenes；模拟器比较使用 501-scene subset"
+    ],
+    "benchmarks": [
+      "OmniDreams-SV 不同训练阶段的生成质量与条件保真度比较",
+      "20 秒滚动的分段 FVD 长时序评估",
+      "NVIDIA GB300 上的单视角与四视角分块推理性能评估",
+      "WAM 与 Alpamayo 1.5：574 scenes、20 秒闭环、10 Hz 重规划",
+      "NuRec 与 OmniDreams：501 scenes、20 秒闭环、533 ms 重规划间隔"
+    ],
+    "metrics": [
+      "FVD ↓",
+      "Temporal Sampson ↓",
+      "BEVFormer：LET-AP、LET-APL、LET-APH ↑",
+      "LATR：lane line F1 ↑、far x-coordinate error ↓、category accuracy ↑",
+      "分段 FVD、平均 FVD、末窗口与首窗口 FVD 差值 ↓",
+      "每生成块延迟、effective FPS",
+      "All Incidents (Collision + Offroad) ↓",
+      "Collision (Front / Lateral / Rear) ↓",
+      "Offroad ↓"
+    ],
+    "baselines": [
+      "Bidirectional (AV adapted)",
+      "Causal (Diffusion Forcing)",
+      "Short-context teacher",
+      "Distilled (Original VAE)",
+      "NVIDIA NuRec",
+      "Alpamayo 1.5：四摄像头、双摄像头和单摄像头配置"
+    ],
+    "main_results": [
+      {
+        "text": "在 1,000 个留出 clips 上，Self Forcing 蒸馏模型的 FVD 为 24.8，低于双向模型的 26.8 和 Diffusion Forcing 因果模型的 31.7；但其 Temporal Sampson 为 1.90，高于两者的 1.83 和 1.87，说明这些质量指标并未同步改善。",
+        "evidence_ids": [
+          "E28",
+          "E29",
+          "E30",
+          "E31"
+        ]
+      },
+      {
+        "text": "704×1280 分辨率下，单视角模型在一张 GB300 上每 8 帧耗时 118 ms，报告 68 effective FPS；四视角模型在 16 张 GB300 上每 16 帧耗时 151 ms，报告每摄像头 105 effective FPS。缓存维护在关键路径外执行。",
+        "evidence_ids": [
+          "E19",
+          "E20",
+          "E21"
+        ]
+      },
+      {
+        "text": "渐进长上下文教师将 20 秒滚动的平均分段 FVD 从 240.0 降至 179.4，末段 FVD 从 409.2 降至 268.4；末段减首段的差值从 299.9 降至 172.9。",
+        "evidence_ids": [
+          "E32",
+          "E33",
+          "E34"
+        ]
+      },
+      {
+        "text": "LightTAE 解码器带来质量与延迟权衡：相较原始 VAE，FVD 从 24.8 增至 45.4，Temporal Sampson 从 1.90 增至 2.02。",
+        "evidence_ids": [
+          "E35",
+          "E36",
+          "E41"
+        ]
+      },
+      {
+        "text": "在 574-scene、20 秒、10 Hz 重规划协议下，OmniDreams WAM 相比 Alpamayo 1.5 将碰撞率从 6.9% 降至 4.2%；前向、侧向和后向碰撞分别从 1.0%、0.6%、5.3% 降至 0.9%、0.4%、3.0%。参数规模约为 2B 对 10B；论文将该方向的结果定位为初步验证。",
+        "evidence_ids": [
+          "E25",
+          "E26",
+          "E27",
+          "E51"
+        ]
+      },
+      {
+        "text": "在 501-scene 模拟器对比中，将传感器后端从 NuRec 换成 OmniDreams 后，All Incidents 的策略相对排名保持一致。该实验每 533 ms 重规划，且只在自车距记录轨迹 4 m 内统计事故。",
+        "evidence_ids": [
+          "E37",
+          "E38",
+          "E39",
+          "E52"
+        ]
+      },
+      {
+        "text": "将闭环生成轨迹固定后分别通过两个模拟器重放，随着平均轨迹偏离增加，论文报告 NuRec 的 FVD 快速上升，而 OmniDreams 更稳定；所供正文未给出该比较的具体数值。",
+        "evidence_ids": [
+          "E40"
+        ]
+      }
+    ],
+    "evidence_ids": [
+      "E04",
+      "E05",
+      "E20",
+      "E21",
+      "E25",
+      "E26",
+      "E27",
+      "E28",
+      "E29",
+      "E30",
+      "E31",
+      "E32",
+      "E33",
+      "E34",
+      "E35",
+      "E36",
+      "E37",
+      "E38",
+      "E39",
+      "E40",
+      "E41",
+      "E47",
+      "E51",
+      "E52",
+      "E53"
+    ]
+  },
+  "limitations": [
+    {
+      "text": "生成式视频仿真原生需要显著多于重建式仿真的计算量，存在质量与计算成本权衡。",
+      "evidence_ids": [
+        "E42"
+      ]
+    },
+    {
+      "text": "分块生成要求在请求时确定整个块的自车与其他参与者轨迹；策略和交通模型无法在块中途修改轨迹而不使整个视频块失效。",
+      "evidence_ids": [
+        "E23"
+      ]
+    },
+    {
+      "text": "轻量解码器降低推理延迟时会损失生成质量，论文的解码器比较明确展示了这一权衡。",
+      "evidence_ids": [
+        "E35",
+        "E36",
+        "E41"
+      ]
+    },
+    {
+      "text": "简单地在首帧插入未被结构化状态表示的分布外物体，容易产生视觉伪影与不一致运动；论文为此另行后训练动态 cuboid 随机丢弃变体。",
+      "evidence_ids": [
+        "E54"
+      ]
+    }
+  ],
+  "interpretation": {
+    "summary": "AI 解读：论文的价值集中在把驾驶条件控制、因果生成训练和有状态仿真服务组成可运行的闭环系统。结果支持其在所述协议下保留策略排序，但将这种一致性推广为更广泛的真实世界评估可靠性仍需验证。另有一处需核对：所附多视角架构图将 Cross-View Attention 画在文本 Cross-Attention 之前，而图注及训练正文写在其后；无法仅凭所供材料确定实际实现顺序。",
+    "open_questions": [
+      "策略排序一致性是否能推广到远离记录轨迹的场景，而不限于当前事故统计范围？",
+      "长滚动中 FVD 仍随时间增加时，交通语义、参与者身份和动作响应是否也保持稳定？",
+      "减少生成块长度后，闭环反应速度、吞吐和质量如何变化？",
+      "WAM 的优势分别来自世界模型预训练、视觉条件设计和轨迹训练目标中的哪些因素？",
+      "多视角架构图与正文关于跨视角注意力插入顺序的不一致如何解释？"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E01",
+      "section": "Abstract",
+      "page": 1,
+      "content": "OmniDreams, a foundation generative world model mid- and post-trained from the Cosmos diffusion model to autoregressively generate action-conditioned videos in real time."
+    },
+    {
+      "id": "E02",
+      "section": "1. Introduction",
+      "page": 4,
+      "content": "how to test these policies in safety-critical, long-tail scenarios before real-world deployment."
+    },
+    {
+      "id": "E03",
+      "section": "1. Introduction",
+      "page": 4,
+      "content": "they struggle to scale beyond the captured corridor, introduce new scene content, or generate consistent photorealistic observations under substantially new conditions."
+    },
+    {
+      "id": "E04",
+      "section": "2.4. Dataset Composition",
+      "page": 7,
+      "content": "RDS provides the mid-training data (16,600 h; 3M clips). Post-training and finetuning use RDS-HQ-1M (4,944 h; 1,142,285 clips)"
+    },
+    {
+      "id": "E05",
+      "section": "2.4. Dataset Composition",
+      "page": 7,
+      "content": "We hold out 5,000 clips from the training set for evaluation and testing."
+    },
+    {
+      "id": "E06",
+      "section": "Figure 3",
+      "page": 8,
+      "content": "a text prompt, the next abstract state from the simulator, and a history-frame cache to generate next-step sensor frames"
+    },
+    {
+      "id": "E07",
+      "section": "3.1. Network Architecture",
+      "page": 8,
+      "content": "The first frame of the simulation session, encoded as clean latent tokens to initialize the generation"
+    },
+    {
+      "id": "E08",
+      "section": "3.1. Network Architecture",
+      "page": 9,
+      "content": "These tokens are aligned with the latent representation and concatenated with the visual tokens before being fed into the transformer."
+    },
+    {
+      "id": "E09",
+      "section": "3.2. Consistent Multi-View Generation",
+      "page": 9,
+      "content": "Temporal attention is applied independently within each view. Tokens attend to previous frames through the causal KV cache"
+    },
+    {
+      "id": "E10",
+      "section": "3.2. Consistent Multi-View Generation",
+      "page": 9,
+      "content": "Cross-view attention is applied across views at each time step."
+    },
+    {
+      "id": "E11",
+      "section": "3. Model Architecture",
+      "page": 8,
+      "content": "Generates a single frontfacing camera view, producing 8 frames per step (2 latent frames)"
+    },
+    {
+      "id": "E12",
+      "section": "3. Model Architecture",
+      "page": 8,
+      "content": "Jointly generates four synchronized views (front camera, cross-left camera, cross-right camera, front-telescope camera), producing 16 frames per step (4 latent frames)."
+    },
+    {
+      "id": "E13",
+      "section": "4.2. Mid-training for Autoregressive Generation",
+      "page": 11,
+      "content": "We apply causal masking with Diffusion Forcing (Chen et al., 2024) training to convert the bidirectional models into causal models for autoregressive generation."
+    },
+    {
+      "id": "E14",
+      "section": "4.3. Distillation",
+      "page": 12,
+      "content": "we apply Self Forcing (Huang et al., 2025), a training framework that combines autoregressive self-rollout with a holistic, video-level distribution-matching objective"
+    },
+    {
+      "id": "E15",
+      "section": "Self Forcing Training via Self-Rollout.",
+      "page": 12,
+      "content": "a 𝐾-step diffusion process (𝐾=2, with a timestep schedule of [1000, 450] in our implementation)."
+    },
+    {
+      "id": "E16",
+      "section": "Progressive Training with a Longer Teacher.",
+      "page": 13,
+      "content": "We then use this long-context bidirectional model as the teacher to continue finetuning the model that was previously distilled with the short-context teacher."
+    },
+    {
+      "id": "E17",
+      "section": "Local temporal attention.",
+      "page": 13,
+      "content": "a fixed window of 6 latent frames (24 RGB frames) for OmniDreams-SV and 8 latent frames (32 RGB frames) for OmniDreams-MV."
+    },
+    {
+      "id": "E18",
+      "section": "Streaming static-shape KV cache.",
+      "page": 13,
+      "content": "We pre-allocate the cache to the fixed size and keep its tensor shape static across the whole rollout"
+    },
+    {
+      "id": "E19",
+      "section": "Figure 6",
+      "page": 15,
+      "content": "KV-cache maintenance runs off the critical path on a side thread."
+    },
+    {
+      "id": "E20",
+      "section": "5. Training-free Model Inference Optimization",
+      "page": 13,
+      "content": "a 16-frame four-view chunk at 704×1280 in 151 ms on a 16-GPU NVIDIA GB300 cabinet (**105 effective FPS per camera**)"
+    },
+    {
+      "id": "E21",
+      "section": "5. Training-free Model Inference Optimization",
+      "page": 13,
+      "content": "an 8-frame single-view chunk in 118 ms on a single GB300 (**68 effective FPS**)."
+    },
+    {
+      "id": "E22",
+      "section": "6. Closed-Loop Simulation Integration",
+      "page": 15,
+      "content": "a stateful video model server that talks to a simulator client over gRPC."
+    },
+    {
+      "id": "E23",
+      "section": "6.4. Supporting chunked generation",
+      "page": 17,
+      "content": "the policy and traffic models cannot mutate these trajectories mid-way through a video chunk without invalidating the entire video chunk."
+    },
+    {
+      "id": "E24",
+      "section": "7.1. Architecture and training",
+      "page": 18,
+      "content": "We train with a joint denoising objective summing flow matching losses on the video and trajectory latents"
+    },
+    {
+      "id": "E25",
+      "section": "7.2. Closed-loop comparison to Alpamayo 1.5",
+      "page": 18,
+      "content": "a 10 Hz replan ning rate and 20-second rollouts over 574-scene Physical AI Autonomous Vehicles NuRec dataset (NVIDIA, 2025)."
+    },
+    {
+      "id": "E26",
+      "section": "7.2. Closed-loop comparison to Alpamayo 1.5",
+      "page": 18,
+      "content": "the OmniDreams-finetuned policy reduces Collision from 6.9% to 4.2% (Front: 1.0% to 0.9%, Lateral: 0.6% to 0.4%, and Rear:5.3% to 3.0%)"
+    },
+    {
+      "id": "E27",
+      "section": "7.2. Closed-loop comparison to Alpamayo 1.5",
+      "page": 18,
+      "content": "despite using roughly five times fewer parameters (∼2 B vs. ∼10 B)."
+    },
+    {
+      "id": "E28",
+      "section": "9.1. Simulation Quality",
+      "page": 20,
+      "content": "Quantitative metrics in this subsection are evaluated on 1,000 clips sampled from the 5,000-clip held-out evaluation split of the RDS-HQ-1M dataset."
+    },
+    {
+      "id": "E29",
+      "section": "9.1. Simulation Quality, Table 4",
+      "page": 20,
+      "content": "Bidirectional (AV adapted)</td><td>26.8</td><td>1.83</td>"
+    },
+    {
+      "id": "E30",
+      "section": "9.1. Simulation Quality, Table 4",
+      "page": 20,
+      "content": "Causal (Diffusion Forcing)</td><td>31.7</td><td>1.87</td>"
+    },
+    {
+      "id": "E31",
+      "section": "9.1. Simulation Quality, Table 4",
+      "page": 20,
+      "content": "Distilled (Self Forcing)</td><td>24.8</td><td>1.90</td>"
+    },
+    {
+      "id": "E32",
+      "section": "9.2. Long Rollouts",
+      "page": 22,
+      "content": "Each 20-second rollout is split into four five-second windows, and each window is compared against the same real-video front-wide reference distribution."
+    },
+    {
+      "id": "E33",
+      "section": "9.2. Long Rollouts, Table 6",
+      "page": 22,
+      "content": "| Short-context teacher | 109.3 | 183.0 | 258.3 | 409.2 | 240.0 | 299.9 |"
+    },
+    {
+      "id": "E34",
+      "section": "9.2. Long Rollouts, Table 6",
+      "page": 22,
+      "content": "| Progressive long-context teacher | 95.5 | 151.0 | 202.5 | 268.4 | 179.4 | 172.9 |"
+    },
+    {
+      "id": "E35",
+      "section": "9.1. Simulation Quality, Table 5",
+      "page": 21,
+      "content": "Distilled (Original VAE)</td><td>24.8</td><td>1.90</td>"
+    },
+    {
+      "id": "E36",
+      "section": "9.1. Simulation Quality, Table 5",
+      "page": 21,
+      "content": "Distilled (LightTAE decoder)</td><td>45.4</td><td>2.02</td>"
+    },
+    {
+      "id": "E37",
+      "section": "Evaluation set and metrics.",
+      "page": 24,
+      "content": "We use a 501-scene subset of the released Physical AI Autonomous Vehicles NuRec dataset (NVIDIA, 2025)."
+    },
+    {
+      "id": "E38",
+      "section": "Evaluation set and metrics.",
+      "page": 24,
+      "content": "The policies replan every 533 ms (we throttle the replanning rate to OmniDreams’s chunk rate of 533 ms)."
+    },
+    {
+      "id": "E39",
+      "section": "Results and implications.",
+      "page": 25,
+      "content": "the relative ranking of policies under NuRec is preserved under OmniDreams"
+    },
+    {
+      "id": "E40",
+      "section": "Visual Realism",
+      "page": 25,
+      "content": "As the mean trajectory deviation increases, however, NuRec’s FVD rises rapidly while OmniDreams remains much more stable."
+    },
+    {
+      "id": "E41",
+      "section": "Table 5",
+      "page": 21,
+      "content": "Table 5: We show a tradeoff between decoder latency and generation quality."
+    },
+    {
+      "id": "E42",
+      "section": "Controllability and Compute",
+      "page": 26,
+      "content": "a video-generation based simulator like OmniDreams natively requires much more compute than a reconstruction-based simulator"
+    },
+    {
+      "id": "E43",
+      "section": "8. Post-Training OmniDreams as a Diffusion Fixer",
+      "page": 19,
+      "content": "we start the denoising process from the degraded rendering itself"
+    },
+    {
+      "id": "E44",
+      "section": "5.4. FlashDreams: Generalized Inference and Serving Infra",
+      "page": 15,
+      "content": "an open-source streaming inference stack for autoregressive world and video models"
+    },
+    {
+      "id": "E45",
+      "section": "NVIDIA SIL platform components",
+      "page": 37,
+      "content": "**Cosmos / Cosmos-Predict 2.5** NVIDIA’s video-foundation-model platform (33); OmniDreams-SV and OmniDreams-MV post-train from Cosmos-Predict 2.5."
+    },
+    {
+      "id": "E46",
+      "section": "6.4.2. Pre-fetch generation",
+      "page": 17,
+      "content": "We call this strategy pre-fetch because the video model call happens before advancing the simulation timer."
+    },
+    {
+      "id": "E47",
+      "section": "Policies compared.",
+      "page": 24,
+      "content": "Alpamayo 1.5 (2 cam) (front-wide + front-telescope only) and Alpamayo 1.5 (1 cam) (front-wide only)"
+    },
+    {
+      "id": "E48",
+      "section": "References",
+      "page": 33,
+      "content": "World simulation with video foundation models for physical ai. arXiv preprint arXiv:2511.00062, 2025."
+    },
+    {
+      "id": "E49",
+      "section": "References",
+      "page": 31,
+      "content": "Diffusion forcing: Next-token prediction meets full-sequence diffusion."
+    },
+    {
+      "id": "E50",
+      "section": "4.3. Distillation",
+      "page": 12,
+      "content": "based on Distribution Matching Distillation (DMD) (Yin et al., 2024)."
+    },
+    {
+      "id": "E51",
+      "section": "Abstract",
+      "page": 1,
+      "content": "We additionally show preliminary results indicating that a world-action model (WAM) post-trained from OmniDreams achieves strong performance"
+    },
+    {
+      "id": "E52",
+      "section": "Evaluation set and metrics.",
+      "page": 24,
+      "content": "an incident such as a collision or off-road event is only counted when the ego is within 4 m of the corresponding ground-truth trajectory."
+    },
+    {
+      "id": "E53",
+      "section": "Table 4",
+      "page": 20,
+      "content": "3D detection metrics LET-AP/APL/APH Hung et al. (2024) are computed by running the off-the-shelf BEVFormer detector (Li et al., 2022) on OmniDreams outputs."
+    },
+    {
+      "id": "E54",
+      "section": "9.3.2. Out-of-Distribution Object Modeling",
+      "page": 22,
+      "content": "this often leads to visual artifacts and inconsistent dynamics, as the inserted objects are not represented in the world-scenario map"
+    },
+    {
+      "id": "E55",
+      "section": "References",
+      "page": 32,
+      "content": "Self forcing: Bridging the train-test gap in autoregressive video diffusion. arXiv preprint arXiv:2506.08009, 2025."
+    },
+    {
+      "id": "E56",
+      "section": "References",
+      "page": 35,
+      "content": "One-step diffusion with distribution matching distillation."
+    },
+    {
+      "id": "E57",
+      "section": "References",
+      "page": 33,
+      "content": "AlpaSim: An open-source closed-loop autonomous vehicle simulator."
+    },
+    {
+      "id": "E58",
+      "section": "6.1. AlpaSim",
+      "page": 16,
+      "content": "Our integration of OmniDreams involves replacing NVIDIA NuRec as the camera frame renderer"
+    },
+    {
+      "id": "E59",
+      "section": "References",
+      "page": 33,
+      "content": "NVIDIA Omniverse NuRec: Neural reconstruction for autonomous vehicle simulation."
+    },
+    {
+      "id": "E60",
+      "section": "References",
+      "page": 33,
+      "content": "Physical AI autonomous vehicles NuRec dataset."
+    },
+    {
+      "id": "E61",
+      "section": "7. Post-training OmniDreams as a World-Action Model (WAM)",
+      "page": 18,
+      "content": "The policy predicts a 6.4-second future ego trajectory at 10 Hz (64 waypoints)."
+    },
+    {
+      "id": "E62",
+      "section": "3.1. Network Architecture",
+      "page": 9,
+      "content": "the structured simulator state is first encoded using a small MLP into compact control tokens."
+    },
+    {
+      "id": "E63",
+      "section": "9.3.2. Out-of-Distribution Object Modeling",
+      "page": 22,
+      "content": "we further post-train another variant of OmniDreams with randomized dynamic-cuboid dropout."
+    }
+  ],
+  "related_papers": [
+    {
+      "title": "World simulation with video foundation models for physical ai",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "论文明确将 Cosmos-Predict 2.5 作为 OmniDreams 单视角和多视角后训练的基础。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2511.00062",
+      "url": "",
+      "evidence_ids": [
+        "E45",
+        "E48"
+      ]
+    },
+    {
+      "title": "Diffusion forcing: Next-token prediction meets full-sequence diffusion",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "用于结合因果掩码，将双向视频生成模型适配为自回归生成模型。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E13",
+        "E49"
+      ]
+    },
+    {
+      "title": "Self forcing: Bridging the train-test gap in autoregressive video diffusion",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "采用其自滚动训练与蒸馏方案，缩小自回归生成的训练推理差异。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "2506.08009",
+      "url": "",
+      "evidence_ids": [
+        "E14",
+        "E55"
+      ]
+    },
+    {
+      "title": "One-step diffusion with distribution matching distillation",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "提供 Self Forcing 蒸馏阶段使用的视频级分布匹配目标。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "",
+      "evidence_ids": [
+        "E50",
+        "E56"
+      ]
+    },
+    {
+      "title": "AlpaSim: An open-source closed-loop autonomous vehicle simulator",
+      "paper_id": null,
+      "relation_type": "builds_on",
+      "description": "作为闭环仿真编排器，论文扩展其接口以接入有状态、分块生成的 OmniDreams 视频服务。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "https://github.com/NVlabs/alpasim",
+      "evidence_ids": [
+        "E46",
+        "E57",
+        "E58"
+      ]
+    },
+    {
+      "title": "NVIDIA Omniverse NuRec: Neural reconstruction for autonomous vehicle simulation",
+      "paper_id": null,
+      "relation_type": "compares_with",
+      "description": "作为重建式传感器仿真基线，与 OmniDreams 比较闭环策略排序及偏离记录轨迹后的视觉质量。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "https://developer.nvidia.com/omniverse/nurec",
+      "evidence_ids": [
+        "E39",
+        "E40",
+        "E59"
+      ]
+    },
+    {
+      "title": "Physical AI autonomous vehicles NuRec dataset",
+      "paper_id": null,
+      "relation_type": "uses_dataset",
+      "description": "用于 WAM 与 Alpamayo 1.5 的闭环比较，以及 NuRec 与 OmniDreams 传感器仿真的共同场景比较。",
+      "source": "paper_reference",
+      "doi": "",
+      "arxiv_id": "",
+      "url": "https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles-NuRec",
+      "evidence_ids": [
+        "E25",
+        "E37",
+        "E60"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F1",
+      "caption": "Figure 1: Closed-loop simulation workflow. A policy model (here, Alpamayo 1 (NVIDIA, 2026)) or user sends an action to the AlpaSim simulation runtime. AlpaSim updates the simulation state and forwards the context to OmniDreams, which synthesizes the next camera frames and returns them to the policy, completing the loop.",
+      "description": "整体闭环概览。上方依次显示 Agent、Simulator 和 World Model：Alpamayo 1 或用户通过 ACTION 箭头驱动 AlpaSim，后者经 ABSTRACT STATE UPDATE 箭头连接 OmniDreams；下方回路将合成摄像头帧送回策略。下排对应展示驾驶控制、抽象状态渲染和生成摄像头观测三个示例，明确本文世界模型在闭环中的位置。",
+      "page": 4,
+      "path": "/paper-assets/omnidreams-2026/f1.webp",
+      "type": "concept_overview"
+    },
+    {
+      "id": "F7",
+      "caption": "Figure 4: Multi-view OmniDreams DiT. Compared to the single-view Cosmos-Predict 2.5 backbone, each Multi-View Cross Block adds (i) a per-view view embedding that is summed with the time embedding and used as an additive AdaLN signal on the shift, scale, and gate of all sublayers, and (ii) a Cross-View Attention sublayer after the text Cross-Attention that attends across the tokens of all V views to enforce cross-camera consistency.",
+      "description": "多视角 DiT 架构。四路分别标为 View 1–4，上方输入 Noise + Conditioning Video，下方输出各视角去噪 tokens。每路可见视角与时间 embedding 相加后调制 DiT 子层；块内包含 Self-Attention、Cross-View Attention、文本 Cross-Attention 和 Feed-forward，并标注重复 N 个块。横向虚线连接跨视角注意力，右侧 Causal mask 与 Text embedding 分别接入注意力层，展示时间因果性和视角协调的核心设计。",
+      "page": 10,
+      "path": "/paper-assets/omnidreams-2026/f7.webp",
+      "type": "architecture"
+    },
+    {
+      "id": "F9",
+      "caption": "Figure 6: End-to-end inference pipeline over two consecutive client/server round-trips. KV-cache maintenance runs off the critical path on a side thread. A chunk is 𝐾 contiguous frames generated together; we use 𝐾=16 for OmniDreams-MV (all cameras generated jointly) and 𝐾=8 for OmniDreams-SV.",
+      "description": "端到端服务与连续滚动流程。上方 AlpaSim 向 Video Model Server 发送 N 个抽象状态，服务将 N 个 RGB 帧返回 Alpamayo 1 或用户，轨迹反馈箭头闭合回路。下方保留 Initialization、Rollout 1、Rollout 2 三个阶段：文本和首帧初始化 DiT 缓存；每次滚动由抽象状态经过 Encoder、Multi-Step DiT、Decoder 输出 RGB。DiT 旁路连接 KV Cache Update，虚线将缓存传递到下一次滚动，说明实时闭环依赖的状态复用。",
+      "page": 15,
+      "path": "/paper-assets/omnidreams-2026/f9.webp",
+      "type": "method_overview"
+    }
+  ],
+  "tags": [
+    "KV cache",
+    "Self Forcing",
+    "World-Action Model",
+    "因果视频扩散",
+    "多视角生成",
+    "实时推理",
+    "生成式世界模型",
+    "自动驾驶",
+    "闭环仿真"
+  ],
+  "analysis_meta": {
+    "analyzer": "codex",
+    "analyzed_at": "2026-10-01T12:29:53+00:00",
+    "schema_version": "1.0",
+    "prompt_version": "1.1",
+    "source_hash": "ad43aea5b73d5cc166128cd8950292e523e77293f953625579b4636e45f7b598",
+    "parser_version": "mineru-cli-figures-1.2-default"
+  }
+}
